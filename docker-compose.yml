@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ai_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn ai_service.main:app --host 0.0.0.0 --port 8100
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agent:agent@postgres:5432/agent
+      LANGGRAPH_CHECKPOINT_DSN: postgresql://agent:agent@postgres:5432/agent
+      USE_MOCK_LLM: "true"
+      USE_MOCK_IMAGE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8100:8100"
+
+  backend_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn backend_api.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agent:agent@postgres:5432/agent
+      AI_SERVICE_BASE_URL: http://ai_service:8100
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai_service:
+        condition: service_started
+    ports:
+      - "8000:8000"
+
+volumes:
+  pg_data:
