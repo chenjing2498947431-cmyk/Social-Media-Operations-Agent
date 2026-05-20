@@ -13,7 +13,8 @@ class AIServiceClient:
         self._base_url = base_url or get_settings().ai_service_base_url
 
     async def start_workflow(self, thread_id: str, context: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # 启动会触发一次真实大模型选题生成，留足超时
+        async with httpx.AsyncClient(timeout=120.0) as client:
             r = await client.post(
                 f"{self._base_url}/ai/v1/workflows",
                 json={"thread_id": thread_id, "context": context},
@@ -22,7 +23,8 @@ class AIServiceClient:
             return r.json()
 
     async def resume_workflow(self, thread_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        # 审核 approve 会触发改写 + 多张图并发生成，耗时较长
+        async with httpx.AsyncClient(timeout=180.0) as client:
             r = await client.post(
                 f"{self._base_url}/ai/v1/workflows/{thread_id}/resume",
                 json={"payload": payload},

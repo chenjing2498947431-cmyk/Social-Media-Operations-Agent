@@ -17,6 +17,10 @@ class BackendSettings(BaseSettings):
     # AI Service 地址（backend_api 通过 HTTP 调用 AI 服务）
     ai_service_base_url: str = "http://localhost:8100"
 
+    # 允许跨域访问的前端来源；默认放开，生产可在 .env 用 JSON 数组收敛
+    # 例：CORS_ALLOW_ORIGINS=["http://localhost:5173"]
+    cors_allow_origins: list[str] = ["*"]
+
 
 @lru_cache
 def get_settings() -> BackendSettings:

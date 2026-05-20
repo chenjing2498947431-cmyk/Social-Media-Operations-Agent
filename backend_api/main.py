@@ -4,8 +4,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-
 from backend_api.core.config import get_settings
 from backend_api.core.database import close_db, init_db
 from backend_api.routers.campaigns import router as campaigns_router
@@ -76,6 +76,16 @@ app = FastAPI(
         "persistAuthorization": True,
     },
 )
+# 允许前端跨域访问。本应用无 Cookie 鉴权，故 allow_credentials=False，
+# 这样即便 allow_origins=["*"] 也符合 CORS 规范。
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_allow_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(health_router)
 app.include_router(campaigns_router)
 

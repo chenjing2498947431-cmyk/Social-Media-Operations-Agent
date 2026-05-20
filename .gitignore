@@ -101,3 +101,4 @@ docker-compose.override.yml
 .venv
 .anaconda
 conda-meta/
+backend.db

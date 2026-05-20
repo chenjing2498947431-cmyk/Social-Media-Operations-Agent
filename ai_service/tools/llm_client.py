@@ -1,17 +1,84 @@
 """LLM 统一接口封装。
-当前阶段 use_mock_llm=True 时，所有调用返回预置的 mock 数据，
-便于不依赖外部 LLM 即可跑通整条 LangGraph 流程。"""
+
+- use_mock_llm=True：返回预置 mock 数据，不依赖外部 LLM 即可跑通 LangGraph 流程。
+- use_mock_llm=False：调用火山方舟 (Ark) 大模型，OpenAI 兼容的 responses 接口。
+
+真实 prompt 来自 ai_service/prompts/*.yaml。
+"""
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from typing import Any
 
+from openai import AsyncOpenAI
+
 from ai_service.core.config import get_settings
+from ai_service.prompts import get_prompt
+
+
+def _parse_json_array(text: str) -> list[str]:
+    """从 LLM 文本里尽力解析出一个字符串数组。
+
+    兼容三种情况：纯 JSON、被 ```json 围栏包裹、以及退化的逐行列表。
+    """
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
+        cleaned = re.sub(r"\n?```$", "", cleaned).strip()
+
+    candidates = [cleaned]
+    match = re.search(r"\[.*\]", cleaned, re.DOTALL)
+    if match:
+        candidates.append(match.group(0))
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, list):
+            return [str(x).strip() for x in data if str(x).strip()]
+
+    # 退化：按行切分，去掉序号 / 项目符号
+    lines = []
+    for line in cleaned.splitlines():
+        item = re.sub(r"^\s*[-*\d.、)]+\s*", "", line).strip().strip('",')
+        if item:
+            lines.append(item)
+    return lines
 
 
 class LLMClient:
     def __init__(self) -> None:
         self._settings = get_settings()
+        self._client: AsyncOpenAI | None = None
+
+    def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            if not self._settings.ark_api_key:
+                raise RuntimeError(
+                    "USE_MOCK_LLM=false 时必须配置 ARK_API_KEY（见 .env）"
+                )
+            self._client = AsyncOpenAI(
+                base_url=self._settings.ark_base_url,
+                api_key=self._settings.ark_api_key,
+            )
+        return self._client
+
+    async def _complete(self, prompt_name: str, **fields: str) -> str:
+        """加载 prompt 配置 -> 拼接 -> 调用 Ark -> 返回正文。"""
+        prompt = get_prompt(prompt_name)
+        system = prompt["system"].strip()
+        user = prompt["user_template"].format(**fields).strip()
+
+        response = await self._get_client().responses.create(
+            model=self._settings.ark_model,
+            instructions=system,
+            input=user,
+        )
+        return (response.output_text or "").strip()
 
     async def generate_topics(self, context: str) -> list[str]:
         if self._settings.use_mock_llm:
@@ -23,7 +90,8 @@ class LLMClient:
                 "【Mock】消费降级周期里，被错杀的三个核心赛道",
                 "【Mock】解读最新 CPI 数据：通胀拐点是否真的来了",
             ]
-        raise NotImplementedError("真实 LLM 调用尚未接入")
+        text = await self._complete("topic_generator", context=context)
+        return _parse_json_array(text)
 
     async def generate_article(self, selected_topic: str, context: str) -> str:
         if self._settings.use_mock_llm:
@@ -37,7 +105,9 @@ class LLMClient:
                 "三、风险提示：\n本文为 mock 数据，不构成投资建议。\n\n"
                 "四、对普通投资者的建议：\n保持节奏，控制仓位，长期主义。"
             )
-        raise NotImplementedError("真实 LLM 调用尚未接入")
+        return await self._complete(
+            "article_writer", selected_topic=selected_topic, context=context
+        )
 
     async def revise_article(self, draft_article: str, human_feedback: str) -> str:
         if self._settings.use_mock_llm:
@@ -48,7 +118,11 @@ class LLMClient:
                 f"---原稿摘录---\n{draft_article[:120]}...\n\n"
                 "（mock 修订稿正文 1200 字占位）"
             )
-        raise NotImplementedError("真实 LLM 调用尚未接入")
+        return await self._complete(
+            "article_reviser",
+            draft_article=draft_article,
+            human_feedback=human_feedback,
+        )
 
     async def extract_image_prompts(self, draft_article: str) -> list[str]:
         if self._settings.use_mock_llm:
@@ -58,7 +132,8 @@ class LLMClient:
                 "【图2】核心观点：高股息板块的防御价值正在显现",
                 "【图3】核心观点：黄金中长线配置不可忽视",
             ]
-        raise NotImplementedError("真实 LLM 调用尚未接入")
+        text = await self._complete("image_prompt_extractor", draft_article=draft_article)
+        return _parse_json_array(text)
 
 
 _llm_client: LLMClient | None = None
