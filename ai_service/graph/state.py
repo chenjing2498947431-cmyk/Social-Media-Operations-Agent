@@ -1,6 +1,7 @@
 """LangGraph 全局状态定义。"""
 from __future__ import annotations
 
+from operator import add
 from typing import Annotated, Optional, TypedDict
 
 
@@ -26,3 +27,8 @@ class AgentState(TypedDict, total=False):
 
     # 条件边专用字段：上一次人工审核的决定 (approve / reject)
     _last_decision: Optional[str]
+
+    # 运行指标：每个 AI 计算节点执行后追加一条
+    # {node, label, started_at, duration_ms, input_tokens, output_tokens, total_tokens, llm_calls}
+    # add reducer 让指标跨节点累加（改写循环会多次追加 revise_article）
+    node_metrics: Annotated[list[dict], add]

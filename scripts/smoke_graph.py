@@ -1,4 +1,4 @@
-"""不启动 HTTP，直接驱动 LangGraph 走一遍完整流程，用来验证 mock 数据下端到端 OK。
+"""不启动 HTTP，直接驱动 LangGraph 走一遍完整流程，验证端到端真实调用 OK。
 路径覆盖：
   1) 启动 -> 停在选题中断
   2) 提交选题 -> 停在审核中断
@@ -44,6 +44,7 @@ async def main():
             "generated_images": [],
             "revision_round": 0,
             "status": "running",
+            "node_metrics": [],
         },
         config=cfg,
     )

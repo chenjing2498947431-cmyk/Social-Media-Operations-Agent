@@ -1,6 +1,7 @@
 """LangGraph v1.x Checkpointer 选择器：
-- 当配置了 LANGGRAPH_CHECKPOINT_DSN 时，使用 AsyncPostgresSaver
-- 否则 fallback 到 InMemorySaver（便于本地 mock 验证）
+- 当配置了 LANGGRAPH_CHECKPOINT_DSN 时，使用 AsyncPostgresSaver；
+  初始化失败会直接抛错（不再静默降级），以免数据未真正落库却无人察觉。
+- 未配置 DSN 时使用 InMemorySaver（仅本地验证，进程重启即丢状态）。
 
 LangGraph 1.0 起 `MemorySaver` 已重命名为 `InMemorySaver`，本文件优先用新名字，
 若安装的次版本仍只暴露旧名字则回退到 `MemorySaver`。
@@ -39,12 +40,13 @@ async def init_checkpointer():
             saver = await _pg_pool_cm.__aenter__()
             await saver.setup()
             _checkpointer = saver
-            logger.info("LangGraph 使用 AsyncPostgresSaver: %s", dsn)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "AsyncPostgresSaver 初始化失败，fallback 到 InMemorySaver: %s", exc
+            logger.info("LangGraph 使用 AsyncPostgresSaver")
+        except Exception:
+            logger.error(
+                "AsyncPostgresSaver 初始化失败，请检查 LANGGRAPH_CHECKPOINT_DSN "
+                "是否正确、数据库是否可达"
             )
-            _checkpointer = _InMemoryCheckpointer()
+            raise
     else:
         logger.info("未配置 LANGGRAPH_CHECKPOINT_DSN，使用 InMemorySaver")
         _checkpointer = _InMemoryCheckpointer()

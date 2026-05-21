@@ -10,7 +10,7 @@
 
 - **多节点 Agent 工作流**：选题生成 → 人工选题 → 长文撰写 → 人工审核 → 改写循环 → 图片文案提炼 → 文生图。
 - **人工介入**：基于 LangGraph `interrupt()`，工作流会在选题、审核两处暂停，等待运营人员决策后恢复。
-- **真实大模型接入**：文本用火山方舟语言模型，配图用 `doubao-seedream` 文生图；可一键切回 Mock 模式离线跑通。
+- **真实大模型接入**：文本用火山方舟语言模型，配图用 `doubao-seedream` 文生图。
 - **状态持久化**：LangGraph Checkpointer 落库 PostgreSQL，工作流可跨进程恢复。
 - **前后端分离**：FastAPI 后端 + React/Ant Design 运营后台。
 
@@ -116,7 +116,8 @@ Social-Media-Operations-Agent/
 - Python **3.11+**
 - Node.js **18+**（前端）
 - PostgreSQL（生产 / checkpoint 持久化；本地验证可省略）
-- 火山方舟 API Key（真实大模型调用；Mock 模式可省略）
+- 火山方舟 API Key（必填，文本与配图均为真实调用）
+- 一个可访问的 PostgreSQL（LangGraph checkpoint 持久化，必填）
 
 ---
 
@@ -138,22 +139,18 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-最小可运行配置（Mock 模式，无需任何外部服务）：
+按 `.env` 中的注释填写即可，关键项：
 
 ```ini
-USE_MOCK_LLM=true
-USE_MOCK_IMAGE=true
-LANGGRAPH_CHECKPOINT_DSN=          # 留空 → 内存 checkpointer
+# 业务库（保持本地 SQLite）
 DATABASE_URL=sqlite+aiosqlite:///./backend.db
-```
 
-接入真实大模型与持久化（生产模式）：
-
-```ini
-USE_MOCK_LLM=false
-USE_MOCK_IMAGE=false
-ARK_API_KEY=你的火山方舟 API Key
+# LangGraph checkpoint —— 必填，指向一个已存在的 PostgreSQL database
 LANGGRAPH_CHECKPOINT_DSN=postgresql://用户名:密码@主机:5432/数据库名
+
+# 火山方舟大模型 —— 必填
+ARK_API_KEY=你的火山方舟 API Key
+ARK_MODEL=ep-xxxxxxxxxxxxx
 ```
 
 ### 3. 启动后端服务
@@ -161,8 +158,8 @@ LANGGRAPH_CHECKPOINT_DSN=postgresql://用户名:密码@主机:5432/数据库名
 在项目根目录分别启动（两个终端）：
 
 ```bash
-# AI 工作流服务
-uvicorn ai_service.main:app --host 0.0.0.0 --port 8100 --reload
+# AI 工作流服务（用 -m 启动，确保 Windows 下事件循环兼容 psycopg async）
+python -m ai_service.main
 
 # 业务后台服务
 uvicorn backend_api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -191,10 +188,8 @@ npm run dev
 | `AI_SERVICE_HOST` / `AI_SERVICE_PORT` | `0.0.0.0` / `8100` | AI 服务监听地址 |
 | `AI_SERVICE_BASE_URL` | `http://localhost:8100` | backend_api 调用 AI 服务的地址 |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./backend.db` | 业务库 DSN（SQLAlchemy） |
-| `LANGGRAPH_CHECKPOINT_DSN` | 空 | LangGraph checkpoint 的 Postgres DSN；留空则用内存 checkpointer（重启丢状态） |
-| `USE_MOCK_LLM` | `true` | `false` 走真实语言模型 |
-| `USE_MOCK_IMAGE` | `true` | `false` 走真实文生图 |
-| `ARK_API_KEY` | 空 | 火山方舟 API Key（`USE_MOCK_*=false` 时必填） |
+| `LANGGRAPH_CHECKPOINT_DSN` | 空 | LangGraph checkpoint 的 Postgres DSN；留空用内存 checkpointer（重启丢状态），配置后若连接失败会直接报错 |
+| `ARK_API_KEY` | 空 | 火山方舟 API Key（必填） |
 | `ARK_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` | 火山方舟接口地址 |
 | `ARK_MODEL` | `ep-...` | 语言模型的推理接入点 ID |
 | `ARK_IMAGE_MODEL` | `doubao-seedream-4-5-251128` | 文生图模型 |
@@ -238,7 +233,8 @@ npm run dev
 **LangGraph Checkpointer**（`ai_service`）：
 
 - 配置了 `LANGGRAPH_CHECKPOINT_DSN` → `AsyncPostgresSaver`，启动时自动建表
-  `checkpoints` / `checkpoint_blobs` / `checkpoint_writes` / `checkpoint_migrations`
+  `checkpoints` / `checkpoint_blobs` / `checkpoint_writes` / `checkpoint_migrations`；
+  连接失败会直接抛错，不会静默降级
 - 留空 → `InMemorySaver`，状态仅存内存，**进程重启即丢失**，仅适合本地快速验证
 
 > 注意：业务库与 checkpoint 库是两套独立存储，可以是不同的数据库。
@@ -253,7 +249,7 @@ npm run dev
 docker compose up --build
 ```
 
-默认以 **Mock 模式** 启动（`USE_MOCK_LLM/IMAGE=true`）。接入真实大模型需在 compose 文件的 `ai_service.environment` 中补充 `ARK_API_KEY` 等变量并将 `USE_MOCK_*` 设为 `false`。
+`ai_service` 走真实大模型，需在宿主机环境变量或同目录 `.env` 中提供 `ARK_API_KEY` / `ARK_MODEL`（compose 已通过 `${...}` 注入）。
 
 ---
 

@@ -8,6 +8,7 @@ import type { CampaignStatus } from '../types';
 import TopicSelectStep from '../components/TopicSelectStep';
 import ArticleReviewStep from '../components/ArticleReviewStep';
 import ResultPanel from '../components/ResultPanel';
+import MetricsPanel from '../components/MetricsPanel';
 
 const STEP_ITEMS = [
   { title: '创建任务' },
@@ -66,6 +67,7 @@ export default function CampaignDetailPage() {
   }
 
   const meta = STATUS_META[campaign.status];
+  const metrics = campaign.workflow_state?.state?.node_metrics ?? [];
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -120,6 +122,8 @@ export default function CampaignDetailPage() {
           description="请查看后端日志排查原因，或重新创建任务。"
         />
       )}
+
+      {metrics.length > 0 && <MetricsPanel metrics={metrics} />}
     </Space>
   );
 }

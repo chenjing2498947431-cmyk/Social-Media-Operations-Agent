@@ -82,3 +82,21 @@ async def healthz():
 @app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/docs")
+
+
+if __name__ == "__main__":
+    # 用 python -m ai_service.main 启动。
+    # 包 __init__ 已把事件循环策略切到 SelectorEventLoop（psycopg async 必需）；
+    # 这里直接 asyncio.run(Server.serve())，绕开 uvicorn.run() 内部会把策略改回
+    # ProactorEventLoop 的 setup_event_loop()。
+    import asyncio
+
+    import uvicorn
+
+    _settings = get_settings()
+    _config = uvicorn.Config(
+        app,
+        host=_settings.ai_service_host,
+        port=_settings.ai_service_port,
+    )
+    asyncio.run(uvicorn.Server(_config).serve())

@@ -13,8 +13,6 @@ class AIServiceSettings(BaseSettings):
     ai_service_port: int = 8100
 
     langgraph_checkpoint_dsn: Optional[str] = None
-    use_mock_llm: bool = True
-    use_mock_image: bool = True
 
     # 火山方舟 (Ark) 大模型配置，OpenAI 兼容接口
     ark_api_key: Optional[str] = None

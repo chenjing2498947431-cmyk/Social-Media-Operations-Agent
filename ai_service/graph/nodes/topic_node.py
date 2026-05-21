@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from langgraph.types import interrupt
 
+from ai_service.core.metrics import track_node
 from ai_service.graph.state import AgentState
 from ai_service.tools.llm_client import get_llm_client
 
 
+@track_node("generate_topics")
 async def generate_topics(state: AgentState) -> dict:
     """Node A: 根据输入背景生成备选选题。"""
     llm = get_llm_client()

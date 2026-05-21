@@ -21,12 +21,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: uvicorn ai_service.main:app --host 0.0.0.0 --port 8100
+    command: python -m ai_service.main
     environment:
-      DATABASE_URL: postgresql+asyncpg://agent:agent@postgres:5432/agent
       LANGGRAPH_CHECKPOINT_DSN: postgresql://agent:agent@postgres:5432/agent
-      USE_MOCK_LLM: "true"
-      USE_MOCK_IMAGE: "true"
+      # 真实大模型调用所需，值取自宿主机环境变量或同目录 .env
+      ARK_API_KEY: ${ARK_API_KEY:-}
+      ARK_BASE_URL: ${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
+      ARK_MODEL: ${ARK_MODEL:-}
+      ARK_IMAGE_MODEL: ${ARK_IMAGE_MODEL:-doubao-seedream-4-5-251128}
     depends_on:
       postgres:
         condition: service_healthy

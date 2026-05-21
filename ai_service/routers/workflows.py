@@ -91,6 +91,7 @@ async def start_workflow(req: WorkflowStartRequest) -> WorkflowStateResponse:
         "generated_images": [],
         "revision_round": 0,
         "status": "running",
+        "node_metrics": [],
     }
     await graph.ainvoke(initial_state, config=_thread_config(req.thread_id))
     return await _build_state_response(req.thread_id)

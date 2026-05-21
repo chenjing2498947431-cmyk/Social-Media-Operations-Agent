@@ -25,6 +25,18 @@ export interface WorkflowInterrupt {
   revision_round?: number;
 }
 
+/** 单个计算节点的运行指标（耗时 + token 用量）。 */
+export interface NodeMetric {
+  node: string;
+  label: string;
+  started_at: string;
+  duration_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  llm_calls: number;
+}
+
 /** LangGraph checkpoint 的 state 值。 */
 export interface AgentStateValues {
   context?: string;
@@ -36,6 +48,7 @@ export interface AgentStateValues {
   image_prompts?: string[];
   generated_images?: string[];
   status?: string;
+  node_metrics?: NodeMetric[];
 }
 
 export interface WorkflowState {

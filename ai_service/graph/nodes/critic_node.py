@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from langgraph.types import interrupt
 
+from ai_service.core.metrics import track_node
 from ai_service.graph.state import AgentState
 from ai_service.tools.llm_client import get_llm_client
 
@@ -34,6 +35,7 @@ def human_review_article(state: AgentState) -> dict:
     }
 
 
+@track_node("revise_article")
 async def revise_article(state: AgentState) -> dict:
     """Node E：基于人工反馈进行重写，回到 Node D。"""
     llm = get_llm_client()
