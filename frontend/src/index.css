@@ -27,3 +27,18 @@ a {
 .markdown-body p {
   margin: 0.6em 0;
 }
+
+/* 流式生成时的闪烁光标 */
+.stream-caret {
+  display: inline-block;
+  margin-left: 2px;
+  color: #1677ff;
+  font-weight: bold;
+  animation: stream-blink 1s steps(2, start) infinite;
+}
+
+@keyframes stream-blink {
+  to {
+    visibility: hidden;
+  }
+}

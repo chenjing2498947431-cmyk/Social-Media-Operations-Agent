@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Path
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend_api.core.database import get_session
@@ -84,6 +85,28 @@ async def select_topic(
 
 
 @router.post(
+    "/{campaign_id}/select-topic/stream",
+    summary="②（流式）提交选题：边生成文案边推送",
+    response_description="text/event-stream：逐段返回文案，完成后推送更新后的 campaign",
+    description=(
+        "SSE 流式版 select-topic，前置条件同 `/select-topic`（status=pending_topic）。\n\n"
+        "事件（`data:` 行，JSON 含 `type`）：`delta` 文案增量 / `done` 完成（带 campaign）/ "
+        "`error` 异常。"
+    ),
+)
+async def select_topic_stream(
+    req: SelectTopicRequest,
+    campaign_id: str = _CAMPAIGN_ID,
+    svc: CampaignService = Depends(_service),
+) -> StreamingResponse:
+    return StreamingResponse(
+        svc.submit_topic_stream(campaign_id, req.selected_topic),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post(
     "/{campaign_id}/review-article",
     response_model=CampaignResponse,
     summary="③ 提交人工审核结果（approve / reject）",
@@ -104,3 +127,25 @@ async def review_article(
     svc: CampaignService = Depends(_service),
 ) -> CampaignResponse:
     return await svc.submit_review(campaign_id, req.decision.value, req.feedback)
+
+
+@router.post(
+    "/{campaign_id}/review-article/stream",
+    summary="③（流式）提交审核结果：实时回传节点运行过程",
+    response_description="text/event-stream：节点事件，完成后推送更新后的 campaign",
+    description=(
+        "SSE 流式版 review-article，前置条件同 `/review-article`。\n\n"
+        "事件（`data:` 行，JSON 含 `type`）：`node` 节点开始/结束 / `done` 完成（带 "
+        "campaign）/ `error` 异常。"
+    ),
+)
+async def review_article_stream(
+    req: ReviewArticleRequest,
+    campaign_id: str = _CAMPAIGN_ID,
+    svc: CampaignService = Depends(_service),
+) -> StreamingResponse:
+    return StreamingResponse(
+        svc.submit_review_stream(campaign_id, req.decision.value, req.feedback),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

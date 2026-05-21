@@ -1,7 +1,8 @@
 """调用 ai_service 的薄封装。"""
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -31,6 +32,22 @@ class AIServiceClient:
             )
             r.raise_for_status()
             return r.json()
+
+    async def resume_workflow_stream(
+        self, thread_id: str, payload: dict[str, Any]
+    ) -> AsyncIterator[dict[str, Any]]:
+        """流式恢复（选题阶段）：逐条 yield 解析后的 SSE 事件 dict。"""
+        timeout = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{self._base_url}/ai/v1/workflows/{thread_id}/resume/stream",
+                json={"payload": payload},
+            ) as r:
+                r.raise_for_status()
+                async for line in r.aiter_lines():
+                    if line.startswith("data:"):
+                        yield json.loads(line[5:].strip())
 
     async def get_state(self, thread_id: str) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as client:

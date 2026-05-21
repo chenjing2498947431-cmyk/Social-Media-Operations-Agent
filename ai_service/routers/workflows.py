@@ -4,9 +4,11 @@
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Path
+from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 
 from ai_service.graph.builder import get_graph
@@ -29,6 +31,11 @@ _THREAD_ID = Path(
 
 def _thread_config(thread_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": thread_id}}
+
+
+def _sse(payload: dict[str, Any]) -> str:
+    """打包成一条 SSE 消息（单 data 行）。"""
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _classify_stage(state_values: dict[str, Any], interrupt_info: dict | None) -> WorkflowStage:
@@ -160,6 +167,79 @@ async def resume_workflow(
 
     await graph.ainvoke(Command(resume=resume_value), config=_thread_config(thread_id))
     return await _build_state_response(thread_id)
+
+
+@router.post(
+    "/{thread_id}/resume/stream",
+    summary="②/③（流式）恢复中断：实时回传节点运行过程与文案增量",
+    response_description="text/event-stream：节点事件 + 文案增量，末尾返回完整工作流状态",
+    description=(
+        "流式版 `/resume`，**选题**与**审核**两种中断均支持。payload 同 `/resume`。\n\n"
+        "SSE 事件（`data:` 行，JSON 含 `type`）：\n"
+        "- `{\"type\":\"node\",\"node\":...,\"label\":...,\"phase\":\"start|end\"}`：节点开始/结束\n"
+        "- `{\"type\":\"delta\",\"text\":...}`：文案文本增量\n"
+        "- `{\"type\":\"state\",\"workflow_state\":{...}}`：完成后的完整状态\n"
+        "- `{\"type\":\"error\",\"message\":...}`：异常"
+    ),
+)
+async def resume_workflow_stream(
+    req: WorkflowResumeRequest,
+    thread_id: str = _THREAD_ID,
+) -> StreamingResponse:
+    graph = get_graph()
+    snapshot = await graph.aget_state(_thread_config(thread_id))
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="thread not found")
+
+    interrupt_info = None
+    for task in (snapshot.tasks or []):
+        if task.interrupts:
+            interrupt_info = task.interrupts[0].value
+            break
+    if interrupt_info is None:
+        raise HTTPException(status_code=409, detail="workflow is not interrupted")
+
+    action = interrupt_info.get("action")
+    payload = req.payload
+    if action == "select_topic":
+        selected = payload.get("selected_topic")
+        if not selected:
+            raise HTTPException(status_code=400, detail="selected_topic required")
+        resume_value: Any = selected
+    elif action == "review_article":
+        decision = payload.get("decision")
+        if decision not in ("approve", "reject"):
+            raise HTTPException(
+                status_code=400, detail="decision must be approve / reject"
+            )
+        if decision == "reject" and not payload.get("feedback"):
+            raise HTTPException(status_code=400, detail="feedback required when reject")
+        resume_value = {"decision": decision, "feedback": payload.get("feedback")}
+    else:
+        raise HTTPException(status_code=400, detail=f"unknown interrupt action: {action}")
+
+    async def event_stream() -> Any:
+        try:
+            async for chunk in graph.astream(
+                Command(resume=resume_value),
+                config=_thread_config(thread_id),
+                stream_mode="custom",
+            ):
+                # 节点生命周期 / 文案增量均由节点经 stream writer 推出
+                if isinstance(chunk, dict) and chunk.get("type") in ("delta", "node"):
+                    yield _sse(chunk)
+            state_resp = await _build_state_response(thread_id)
+            yield _sse(
+                {"type": "state", "workflow_state": state_resp.model_dump(mode="json")}
+            )
+        except Exception as exc:  # noqa: BLE001
+            yield _sse({"type": "error", "message": str(exc)})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get(

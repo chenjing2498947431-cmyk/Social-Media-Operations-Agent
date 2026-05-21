@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Awaitable, Callable
 
+from langgraph.config import get_stream_writer
+
 # 当前节点的 token 累加器；不在 @track_node 作用域内时为 None。
 _token_sink: ContextVar[dict[str, int] | None] = ContextVar("_token_sink", default=None)
 
@@ -54,6 +56,13 @@ def track_node(node_name: str) -> Callable[[_NodeFn], _NodeFn]:
         async def wrapper(state: dict[str, Any]) -> dict[str, Any]:
             sink = {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0}
             token = _token_sink.set(sink)
+            label = NODE_LABELS.get(node_name, node_name)
+
+            # 流式运行（astream stream_mode="custom"）时把节点生命周期推给调用方；
+            # 非流式（ainvoke）时 writer 为 no-op，互不影响。
+            writer = get_stream_writer()
+            writer({"type": "node", "node": node_name, "label": label, "phase": "start"})
+
             started_at = datetime.now(timezone.utc)
             t0 = time.perf_counter()
             try:
@@ -64,7 +73,7 @@ def track_node(node_name: str) -> Callable[[_NodeFn], _NodeFn]:
 
             metric = {
                 "node": node_name,
-                "label": NODE_LABELS.get(node_name, node_name),
+                "label": label,
                 "started_at": started_at.isoformat(),
                 "duration_ms": duration_ms,
                 "input_tokens": sink["input_tokens"],
@@ -72,6 +81,15 @@ def track_node(node_name: str) -> Callable[[_NodeFn], _NodeFn]:
                 "total_tokens": sink["input_tokens"] + sink["output_tokens"],
                 "llm_calls": sink["llm_calls"],
             }
+            writer(
+                {
+                    "type": "node",
+                    "node": node_name,
+                    "label": label,
+                    "phase": "end",
+                    "metric": metric,
+                }
+            )
             out = dict(result or {})
             out["node_metrics"] = [metric]
             return out

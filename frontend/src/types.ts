@@ -37,6 +37,24 @@ export interface NodeMetric {
   llm_calls: number;
 }
 
+/** 流式 SSE 中的节点生命周期事件。 */
+export interface NodeEvent {
+  type: 'node';
+  node: string;
+  label: string;
+  phase: 'start' | 'end';
+  metric?: NodeMetric;
+}
+
+/** 前端展示「节点运行过程」的一行记录。 */
+export interface NodeRun {
+  node: string;
+  label: string;
+  status: 'running' | 'done';
+  durationMs?: number;
+  totalTokens?: number;
+}
+
 /** LangGraph checkpoint 的 state 值。 */
 export interface AgentStateValues {
   context?: string;

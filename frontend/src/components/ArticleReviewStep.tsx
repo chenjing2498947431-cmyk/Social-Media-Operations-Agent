@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Input, Space, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Input, Space, Tag, Typography } from 'antd';
 import ReactMarkdown from 'react-markdown';
-import { useReviewArticle } from '../hooks/campaigns';
+import { useQueryClient } from '@tanstack/react-query';
+import { reviewArticleStream } from '../api/campaigns';
 import { toErrorMessage } from '../api/client';
-import type { Campaign } from '../types';
+import { useNodeRuns } from '../hooks/nodeRuns';
+import NodeProgressPanel from './NodeProgressPanel';
+import type { Campaign, ReviewArticleRequest } from '../types';
 
 export default function ArticleReviewStep({ campaign }: { campaign: Campaign }) {
   const interrupt = campaign.workflow_state?.interrupt;
@@ -11,18 +14,42 @@ export default function ArticleReviewStep({ campaign }: { campaign: Campaign }) 
   const draft = interrupt?.draft_article ?? state?.draft_article ?? '';
   const round = interrupt?.revision_round ?? state?.revision_round ?? 0;
   const [feedback, setFeedback] = useState('');
-  const mutation = useReviewArticle(campaign.id);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { runs, onNode, reset } = useNodeRuns();
+  const qc = useQueryClient();
 
-  if (mutation.isPending) {
-    const tip =
-      mutation.variables?.decision === 'approve'
-        ? '已通过，正在生成配图，约 30-60 秒，请稍候…'
-        : '正在根据修改意见改写文案，约 20-40 秒，请稍候…';
+  async function submit(req: ReviewArticleRequest) {
+    setRunning(true);
+    setError(null);
+    reset();
+    try {
+      await reviewArticleStream(campaign.id, req, {
+        onNode,
+        onDone: (updated) => {
+          // 写回缓存：approve → 父组件切到结果页；reject → 重新渲染审核（新草稿）
+          qc.setQueryData(['campaign', updated.id], updated);
+          qc.invalidateQueries({ queryKey: ['campaigns'] });
+          setFeedback('');
+        },
+        onError: (msg) => setError(msg),
+      });
+    } catch (e) {
+      setError(toErrorMessage(e));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (running) {
     return (
-      <Card>
-        <Spin tip={tip}>
-          <div style={{ height: 120 }} />
-        </Spin>
+      <Card title="Agent 处理中…">
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            正在执行工作流节点，请稍候…
+          </Typography.Text>
+          <NodeProgressPanel runs={runs} />
+        </Space>
       </Card>
     );
   }
@@ -58,26 +85,18 @@ export default function ArticleReviewStep({ campaign }: { campaign: Campaign }) 
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
         />
-        {mutation.isError && (
-          <Alert
-            type="error"
-            showIcon
-            message="提交失败"
-            description={toErrorMessage(mutation.error)}
-          />
+        {error && (
+          <Alert type="error" showIcon message="提交失败" description={error} />
         )}
         <Space>
-          <Button
-            type="primary"
-            onClick={() => mutation.mutate({ decision: 'approve' })}
-          >
+          <Button type="primary" onClick={() => submit({ decision: 'approve' })}>
             通过，生成配图
           </Button>
           <Button
             danger
             disabled={!feedback.trim()}
             onClick={() =>
-              mutation.mutate({ decision: 'reject', feedback: feedback.trim() })
+              submit({ decision: 'reject', feedback: feedback.trim() })
             }
           >
             退回修改

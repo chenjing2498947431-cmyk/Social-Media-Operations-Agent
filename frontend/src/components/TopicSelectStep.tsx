@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Input, Radio, Space, Spin, Typography } from 'antd';
-import { useSelectTopic } from '../hooks/campaigns';
+import { Alert, Button, Card, Input, Radio, Space, Typography } from 'antd';
+import ReactMarkdown from 'react-markdown';
+import { useQueryClient } from '@tanstack/react-query';
+import { selectTopicStream } from '../api/campaigns';
 import { toErrorMessage } from '../api/client';
+import { useNodeRuns } from '../hooks/nodeRuns';
+import NodeProgressPanel from './NodeProgressPanel';
 import type { Campaign } from '../types';
 
 const CUSTOM = '__custom__';
@@ -10,16 +14,90 @@ export default function TopicSelectStep({ campaign }: { campaign: Campaign }) {
   const topics = campaign.workflow_state?.interrupt?.topics ?? [];
   const [selected, setSelected] = useState<string>('');
   const [custom, setCustom] = useState<string>('');
-  const mutation = useSelectTopic(campaign.id);
+  const [streaming, setStreaming] = useState(false);
+  const [streamedText, setStreamedText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const { runs, onNode, reset } = useNodeRuns();
+  const qc = useQueryClient();
 
   const finalTopic = selected === CUSTOM ? custom.trim() : selected;
+  // 一旦开始生成（流式中 / 已有文本 / 出错），就切到生成视图
+  const started = streaming || streamedText.length > 0 || error !== null;
 
-  if (mutation.isPending) {
+  async function handleSubmit() {
+    setStreaming(true);
+    setStreamedText('');
+    setError(null);
+    reset();
+    try {
+      await selectTopicStream(campaign.id, finalTopic, {
+        onDelta: (text) => setStreamedText((prev) => prev + text),
+        onNode,
+        onDone: (updated) => {
+          // 写回缓存：父组件据此切到「文案审核」步骤
+          qc.setQueryData(['campaign', updated.id], updated);
+          qc.invalidateQueries({ queryKey: ['campaigns'] });
+        },
+        onError: (msg) => setError(msg),
+      });
+    } catch (e) {
+      setError(toErrorMessage(e));
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  function backToSelect() {
+    setStreamedText('');
+    setError(null);
+    reset();
+  }
+
+  if (started) {
+    const title = streaming
+      ? '正在生成文案…'
+      : error
+        ? '文案生成失败'
+        : '文案已生成';
     return (
-      <Card>
-        <Spin tip="正在根据选题生成文案，约 20-40 秒，请稍候…">
-          <div style={{ height: 120 }} />
-        </Spin>
+      <Card title={title}>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            {streaming
+              ? 'AI 正在根据选题撰写文案，节点运行过程与内容实时显示…'
+              : error
+                ? '可重试，或返回重新选择选题。'
+                : '生成完成，正在进入审核环节。'}
+          </Typography.Text>
+
+          <NodeProgressPanel runs={runs} />
+
+          <div
+            className="markdown-body"
+            style={{
+              border: '1px solid #f0f0f0',
+              borderRadius: 8,
+              padding: 16,
+              minHeight: 180,
+              maxHeight: 480,
+              overflow: 'auto',
+            }}
+          >
+            <ReactMarkdown>{streamedText}</ReactMarkdown>
+            {streaming && <span className="stream-caret">▋</span>}
+          </div>
+          {error && (
+            <>
+              <Alert type="error" showIcon message="生成失败" description={error} />
+              <Space>
+                <Button type="primary" onClick={handleSubmit}>
+                  重试
+                </Button>
+                <Button onClick={backToSelect}>返回重新选题</Button>
+              </Space>
+            </>
+          )}
+        </Space>
       </Card>
     );
   }
@@ -50,19 +128,7 @@ export default function TopicSelectStep({ campaign }: { campaign: Campaign }) {
             maxLength={60}
           />
         )}
-        {mutation.isError && (
-          <Alert
-            type="error"
-            showIcon
-            message="提交失败"
-            description={toErrorMessage(mutation.error)}
-          />
-        )}
-        <Button
-          type="primary"
-          disabled={!finalTopic}
-          onClick={() => mutation.mutate(finalTopic)}
-        >
+        <Button type="primary" disabled={!finalTopic} onClick={handleSubmit}>
           提交选题并生成文案
         </Button>
       </Space>

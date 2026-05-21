@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, AsyncIterator
 
 from openai import AsyncOpenAI
 
@@ -103,10 +103,47 @@ class LLMClient:
         text = await self._complete("topic_generator", context=context)
         return _parse_json_array(text)
 
-    async def generate_article(self, selected_topic: str, context: str) -> str:
-        return await self._complete(
-            "article_writer", selected_topic=selected_topic, context=context
+    async def stream_article(
+        self, selected_topic: str, context: str
+    ) -> AsyncIterator[str]:
+        """流式生成文案：逐段 yield 文本增量；结束后上报真实 token 用量。
+
+        仅产出 `response.output_text.delta`（正文），忽略模型的思考摘要增量。
+        """
+        prompt = get_prompt("article_writer")
+        system = prompt["system"].strip()
+        user = prompt["user_template"].format(
+            selected_topic=selected_topic, context=context
+        ).strip()
+
+        stream = await self._get_client().responses.create(
+            model=self._settings.ark_model,
+            instructions=system,
+            input=user,
+            stream=True,
         )
+        full_text = ""
+        usage = None
+        async for event in stream:
+            etype = getattr(event, "type", "")
+            if etype == "response.output_text.delta":
+                delta = getattr(event, "delta", "") or ""
+                if delta:
+                    full_text += delta
+                    yield delta
+            elif etype == "response.completed":
+                usage = getattr(getattr(event, "response", None), "usage", None)
+
+        if usage is not None:
+            record_token_usage(
+                getattr(usage, "input_tokens", 0) or 0,
+                getattr(usage, "output_tokens", 0) or 0,
+            )
+        else:
+            record_token_usage(
+                _estimate_tokens(system) + _estimate_tokens(user),
+                _estimate_tokens(full_text),
+            )
 
     async def revise_article(self, draft_article: str, human_feedback: str) -> str:
         return await self._complete(
