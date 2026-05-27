@@ -21,6 +21,9 @@ class AIServiceSettings(BaseSettings):
     # 文生图模型（doubao-seedream）
     ark_image_model: str = "doubao-seedream-4-5-251128"
 
+    # Brave Search MCP Server（本地 HTTP 模式）
+    brave_mcp_url: str = "http://localhost:8200/mcp"
+
 
 @lru_cache
 def get_settings() -> AIServiceSettings:
