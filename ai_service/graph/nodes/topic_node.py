@@ -10,9 +10,12 @@ from ai_service.tools.llm_client import get_llm_client
 
 @track_node("generate_topics")
 async def generate_topics(state: AgentState) -> dict:
-    """Node A: 根据输入背景生成备选选题。"""
+    """Node A: 结合联网搜索结果和背景信息生成备选选题。"""
     llm = get_llm_client()
-    topics = await llm.generate_topics(state["context"])
+    topics = await llm.generate_topics(
+        context=state.get("context", ""),
+        search_results=state.get("search_results", []),
+    )
     return {
         "topics": topics,
         "status": "awaiting_topic",
