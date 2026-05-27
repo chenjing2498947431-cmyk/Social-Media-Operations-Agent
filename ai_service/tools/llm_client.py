@@ -190,6 +190,18 @@ class LLMClient:
         text = await self._complete("image_prompt_extractor", draft_article=draft_article)
         return _parse_json_array(text)
 
+    async def generate_xhs_copy(
+        self,
+        selected_topic: str,
+        draft_article: str,
+    ) -> str:
+        """根据选题和已审核长文生成小红书风格帖子（标题+正文+话题标签）。"""
+        return await self._complete(
+            "xhs_copy_writer",
+            selected_topic=selected_topic,
+            draft_article=draft_article,
+        )
+
 
 _llm_client: LLMClient | None = None
 
