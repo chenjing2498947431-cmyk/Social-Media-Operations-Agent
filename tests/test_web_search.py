@@ -146,3 +146,34 @@ async def test_search_returns_empty_on_malformed_sse():
         results = await tool.search("测试", top_k=5)
 
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_search_works_without_session_id():
+    """initialize 不返回 mcp-session-id 时，后续请求不携带该 header，但流程正常。"""
+    init_payload = {"result": {}}
+    search_payload = {"result": {"content": [
+        {"type": "text", "text": json.dumps({"title": "测试新闻", "description": "内容", "url": "https://x.com"})}
+    ]}}
+
+    # No "mcp-session-id" in headers
+    mock_init_resp = _make_mock_response(200, _sse(init_payload), {})
+    mock_notify_resp = _make_mock_response(202, "")
+    mock_search_resp = _make_mock_response(200, _sse(search_payload))
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=[mock_init_resp, mock_notify_resp, mock_search_resp])
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    tool = WebSearchTool(mcp_url="http://localhost:8200/mcp")
+    with patch("ai_service.tools.web_search.httpx.AsyncClient", return_value=mock_client):
+        results = await tool.search("测试", top_k=5)
+
+    # Search should succeed without session ID
+    assert len(results) == 1
+    assert results[0]["title"] == "测试新闻"
+
+    # Verify no mcp-session-id in subsequent calls
+    notify_call_kwargs = mock_client.post.call_args_list[1][1]
+    assert "mcp-session-id" not in notify_call_kwargs["headers"]

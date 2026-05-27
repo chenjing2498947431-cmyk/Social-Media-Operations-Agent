@@ -71,11 +71,12 @@ class WebSearchTool:
                 req_headers["mcp-session-id"] = session_id
 
             # Step 2: notifications/initialized
-            await client.post(
+            notify_resp = await client.post(
                 self._mcp_url,
                 headers=req_headers,
                 json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
             )
+            notify_resp.raise_for_status()
 
             # Step 3: tools/call brave_news_search
             search_resp = await client.post(
