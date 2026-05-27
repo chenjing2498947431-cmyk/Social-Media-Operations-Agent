@@ -13,6 +13,7 @@ from ai_service.graph.nodes import (
     revise_article,
     extract_image_content,
     generate_images,
+    generate_xhs_copy,
 )
 from ai_service.graph.edges import route_after_review
 from ai_service.persistence.checkpointer import get_checkpointer
@@ -29,6 +30,7 @@ def build_graph():
     builder.add_node("revise_article", revise_article)
     builder.add_node("extract_image_content", extract_image_content)
     builder.add_node("generate_images", generate_images)
+    builder.add_node("generate_xhs_copy", generate_xhs_copy)
 
     builder.add_edge(START, "fetch_news")
     builder.add_edge("fetch_news", "generate_topics")
@@ -46,7 +48,8 @@ def build_graph():
     )
     builder.add_edge("revise_article", "human_review_article")
     builder.add_edge("extract_image_content", "generate_images")
-    builder.add_edge("generate_images", END)
+    builder.add_edge("generate_images", "generate_xhs_copy")
+    builder.add_edge("generate_xhs_copy", END)
 
     return builder.compile(checkpointer=get_checkpointer())
 

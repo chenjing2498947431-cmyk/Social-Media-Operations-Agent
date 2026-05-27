@@ -23,5 +23,19 @@ async def generate_images(state: AgentState) -> dict:
     urls = await image_api.generate(state.get("image_prompts", []))
     return {
         "generated_images": urls,
+        "status": "running",
+    }
+
+
+@track_node("generate_xhs_copy")
+async def generate_xhs_copy(state: AgentState) -> dict:
+    """根据已审核长文生成小红书风格文案，写入 state.xhs_copy。"""
+    llm = get_llm_client()
+    copy_text = await llm.generate_xhs_copy(
+        selected_topic=state.get("selected_topic", ""),
+        draft_article=state.get("draft_article", ""),
+    )
+    return {
+        "xhs_copy": copy_text,
         "status": "completed",
     }

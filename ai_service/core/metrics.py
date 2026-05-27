@@ -31,6 +31,7 @@ NODE_LABELS: dict[str, str] = {
     "revise_article": "文案改写",
     "extract_image_content": "配图文案提炼",
     "generate_images": "配图生成",
+    "generate_xhs_copy": "小红书文案生成",
 }
 
 _NodeFn = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
