@@ -26,6 +26,30 @@ def _estimate_tokens(text: str) -> int:
     return max(1, round(len(text) / 2))
 
 
+def _format_search_results(results: list[dict]) -> str:
+    """将 MCP 搜索结果列表格式化为 prompt 可读文本。
+
+    每条格式：
+        N. 标题
+           摘要
+           来源：URL
+    """
+    if not results:
+        return "（搜索暂不可用，仅凭背景信息生成）"
+    lines: list[str] = []
+    for i, r in enumerate(results, 1):
+        title = r.get("title", "")
+        snippet = r.get("snippet", "")
+        url = r.get("url", "")
+        line = f"{i}. {title}"
+        if snippet:
+            line += f"\n   {snippet}"
+        if url:
+            line += f"\n   来源：{url}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _parse_json_array(text: str) -> list[str]:
     """从 LLM 文本里尽力解析出一个字符串数组。
 
@@ -99,8 +123,18 @@ class LLMClient:
             )
         return text
 
-    async def generate_topics(self, context: str) -> list[str]:
-        text = await self._complete("topic_generator", context=context)
+    async def generate_topics(
+        self,
+        context: str,
+        search_results: list[dict] | None = None,
+    ) -> list[str]:
+        """根据搜索结果和背景信息生成候选选题列表。"""
+        search_context = _format_search_results(search_results or [])
+        text = await self._complete(
+            "topic_generator",
+            context=context,
+            search_context=search_context,
+        )
         return _parse_json_array(text)
 
     async def stream_article(
@@ -173,4 +207,4 @@ def reload_llm_client() -> None:
     _llm_client = None
 
 
-__all__: list[Any] = ["LLMClient", "get_llm_client", "reload_llm_client"]
+__all__: list[Any] = ["LLMClient", "get_llm_client", "reload_llm_client", "_format_search_results"]
