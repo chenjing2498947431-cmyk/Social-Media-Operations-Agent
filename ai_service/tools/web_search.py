@@ -92,8 +92,11 @@ class WebSearchTool:
                 },
             )
             search_resp.raise_for_status()
+            # Parse SSE inside the context manager so the response body is
+            # guaranteed to be available (safe even now since httpx buffers
+            # fully, but explicit is better than implicit).
+            data = _parse_sse(search_resp.text)
 
-        data = _parse_sse(search_resp.text)
         if not data:
             return []
         return _extract_news(data, top_k)

@@ -126,3 +126,23 @@ async def test_search_returns_empty_on_http_error():
         results = await tool.search("测试", top_k=5)
 
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_search_returns_empty_on_malformed_sse():
+    """服务器返回 200 但 body 中没有 data: 行时，返回空列表。"""
+    mock_init_resp = _make_mock_response(200, _sse({"result": {}}), {"mcp-session-id": "s"})
+    mock_notify_resp = _make_mock_response(202, "")
+    # SSE 响应只有 event 行，没有 data: 行
+    mock_search_resp = _make_mock_response(200, "event: message\n\n")
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=[mock_init_resp, mock_notify_resp, mock_search_resp])
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    tool = WebSearchTool(mcp_url="http://localhost:8200/mcp")
+    with patch("ai_service.tools.web_search.httpx.AsyncClient", return_value=mock_client):
+        results = await tool.search("测试", top_k=5)
+
+    assert results == []
