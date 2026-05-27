@@ -25,6 +25,7 @@ _token_sink: ContextVar[dict[str, int] | None] = ContextVar("_token_sink", defau
 
 # 节点名 -> 面向运营人员的中文标签
 NODE_LABELS: dict[str, str] = {
+    "fetch_news": "新闻搜索",          # ← 新增这一行
     "generate_topics": "选题生成",
     "generate_article": "文案撰写",
     "revise_article": "文案改写",
@@ -59,8 +60,11 @@ def track_node(node_name: str) -> Callable[[_NodeFn], _NodeFn]:
             label = NODE_LABELS.get(node_name, node_name)
 
             # 流式运行（astream stream_mode="custom"）时把节点生命周期推给调用方；
-            # 非流式（ainvoke）时 writer 为 no-op，互不影响。
-            writer = get_stream_writer()
+            # 非流式（ainvoke）或测试环境时 writer 为 no-op，互不影响。
+            try:
+                writer = get_stream_writer()
+            except RuntimeError:
+                writer = lambda _: None  # noqa: E731
             writer({"type": "node", "node": node_name, "label": label, "phase": "start"})
 
             started_at = datetime.now(timezone.utc)
