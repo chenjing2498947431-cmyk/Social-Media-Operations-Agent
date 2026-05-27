@@ -5,6 +5,7 @@ from langgraph.graph import StateGraph, START, END
 
 from ai_service.graph.state import AgentState
 from ai_service.graph.nodes import (
+    fetch_news,
     generate_topics,
     human_select_topic,
     generate_article,
@@ -20,6 +21,7 @@ from ai_service.persistence.checkpointer import get_checkpointer
 def build_graph():
     builder = StateGraph(AgentState)
 
+    builder.add_node("fetch_news", fetch_news)
     builder.add_node("generate_topics", generate_topics)
     builder.add_node("human_select_topic", human_select_topic)
     builder.add_node("generate_article", generate_article)
@@ -28,7 +30,8 @@ def build_graph():
     builder.add_node("extract_image_content", extract_image_content)
     builder.add_node("generate_images", generate_images)
 
-    builder.add_edge(START, "generate_topics")
+    builder.add_edge(START, "fetch_news")
+    builder.add_edge("fetch_news", "generate_topics")
     builder.add_edge("generate_topics", "human_select_topic")
     builder.add_edge("human_select_topic", "generate_article")
     builder.add_edge("generate_article", "human_review_article")
