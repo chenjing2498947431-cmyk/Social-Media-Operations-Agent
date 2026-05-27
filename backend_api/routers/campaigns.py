@@ -111,7 +111,7 @@ async def select_topic_stream(
     response_model=CampaignResponse,
     summary="③ 提交人工审核结果（approve / reject）",
     response_description=(
-        "若 approve：status=completed，state 中含 image_prompts + generated_images；"
+        "若 approve：status=completed，state 中含 image_prompts + generated_images + xhs_copy；"
         "若 reject：status 仍为 pending_review，state.draft_article 已被重写，revision_round +1"
     ),
     description=(

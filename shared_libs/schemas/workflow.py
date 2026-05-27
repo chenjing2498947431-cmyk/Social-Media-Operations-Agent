@@ -82,7 +82,7 @@ class WorkflowStateResponse(BaseModel):
     )
     state: dict[str, Any] = Field(
         ...,
-        description="LangGraph 当前 checkpoint 的 values（包含 topics / draft_article / generated_images 等）",
+        description="LangGraph 当前 checkpoint 的 values（包含 topics / draft_article / generated_images / xhs_copy 等）",
     )
     interrupt: Optional[dict[str, Any]] = Field(
         default=None,

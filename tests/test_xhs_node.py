@@ -53,3 +53,29 @@ async def test_generate_xhs_copy_handles_missing_state_fields():
         draft_article="",
     )
     assert result["xhs_copy"] == "文案"
+    assert result["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_generate_images_returns_running_status():
+    """generate_images 现在是中间节点，status 应为 running（非 completed）。
+    完整流程由 generate_xhs_copy 负责设置 status=completed。
+    """
+    from unittest.mock import AsyncMock, patch
+    from ai_service.graph.nodes.image_node import generate_images
+
+    state = {
+        "image_prompts": ["A股市场走势图"],
+        "status": "running",
+        "node_metrics": [],
+    }
+
+    with patch("ai_service.graph.nodes.image_node.get_image_api") as mock_get:
+        mock_api = AsyncMock()
+        mock_api.generate = AsyncMock(return_value=["https://img.example.com/1.png"])
+        mock_get.return_value = mock_api
+
+        result = await generate_images(state)
+
+    assert result["status"] == "running"
+    assert result["generated_images"] == ["https://img.example.com/1.png"]
