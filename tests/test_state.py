@@ -19,3 +19,10 @@ def test_agent_state_search_results_defaults_to_absent():
     """search_results 是 total=False 字段，可以不传。"""
     state: AgentState = {"context": "美联储", "status": "running", "node_metrics": []}
     assert state.get("search_results") is None
+
+
+def test_xhs_copy_field_in_agent_state():
+    """xhs_copy 字段存在于 AgentState 注解中。"""
+    import typing
+    hints = typing.get_type_hints(AgentState)
+    assert "xhs_copy" in hints

@@ -24,6 +24,7 @@ class AgentState(TypedDict, total=False):
     # 图片环节
     image_prompts: list[str]
     generated_images: list[str]
+    xhs_copy: Optional[str]       # 小红书文案（generate_xhs_copy 节点写入）
 
     # 工作流状态
     status: str  # awaiting_topic / awaiting_review / running / completed / failed
