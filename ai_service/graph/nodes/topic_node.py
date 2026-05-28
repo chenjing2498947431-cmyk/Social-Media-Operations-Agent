@@ -6,18 +6,21 @@ from langgraph.types import interrupt
 from ai_service.core.metrics import track_node
 from ai_service.graph.state import AgentState
 from ai_service.tools.llm_client import get_llm_client
+from ai_service.tools.web_search import get_web_search
 
 
 @track_node("generate_topics")
 async def generate_topics(state: AgentState) -> dict:
-    """Node A: 结合联网搜索结果和背景信息生成备选选题。"""
+    """Node A: 让 LLM 自主决定是否联网搜索，然后生成备选选题。"""
     llm = get_llm_client()
-    topics = await llm.generate_topics(
+    search_tool = get_web_search()
+    topics, search_results = await llm.generate_topics(
         context=state.get("context", ""),
-        search_results=state.get("search_results", []),
+        search_fn=search_tool.search,
     )
     return {
         "topics": topics,
+        "search_results": search_results,
         "status": "awaiting_topic",
     }
 
