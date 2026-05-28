@@ -181,7 +181,7 @@ class LLMClient:
             if msg.tool_calls and search_fn is not None:
                 messages.append({
                     "role": "assistant",
-                    "content": msg.content,
+                    "content": msg.content or "",
                     "tool_calls": [
                         {
                             "id": tc.id,
@@ -197,7 +197,7 @@ class LLMClient:
                 for tc in msg.tool_calls:
                     args = json.loads(tc.function.arguments)
                     results = await search_fn(args.get("query", context))
-                    used_results = results
+                    used_results.extend(results)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tc.id,
