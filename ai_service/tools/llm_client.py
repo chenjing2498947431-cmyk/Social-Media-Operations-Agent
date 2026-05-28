@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 from openai import AsyncOpenAI
 
@@ -82,6 +82,22 @@ def _parse_json_array(text: str) -> list[str]:
     return lines
 
 
+_SEARCH_NEWS_TOOL: dict = {
+    "type": "function",
+    "function": {
+        "name": "search_news",
+        "description": "搜索最新金融新闻和市场热点。当背景信息不足以生成有时效性的选题时调用。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜索关键词"}
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+
 class LLMClient:
     def __init__(self) -> None:
         self._settings = get_settings()
@@ -126,16 +142,72 @@ class LLMClient:
     async def generate_topics(
         self,
         context: str,
-        search_results: list[dict] | None = None,
-    ) -> list[str]:
-        """根据搜索结果和背景信息生成候选选题列表。"""
-        search_context = _format_search_results(search_results or [])
-        text = await self._complete(
-            "topic_generator",
-            context=context,
-            search_context=search_context,
-        )
-        return _parse_json_array(text)
+        search_fn: Callable | None = None,
+    ) -> tuple[list[str], list[dict]]:
+        """结合可选的联网工具生成候选选题列表。
+
+        LLM 自主决定是否调用 search_news；最多循环 2 轮（1 次工具调用 + 1 次生成）。
+        无论是否调用工具，均返回 (topics, used_results)。
+        """
+        prompt = get_prompt("topic_generator")
+        system = prompt["system"].strip()
+        user = prompt["user_template"].format(context=context).strip()
+
+        messages: list[dict] = [{"role": "user", "content": user}]
+        tools = [_SEARCH_NEWS_TOOL] if search_fn is not None else []
+        used_results: list[dict] = []
+        oai = self._get_client()
+
+        for _ in range(2):
+            create_kwargs: dict = {
+                "model": self._settings.ark_model,
+                "messages": [{"role": "system", "content": system}] + messages,
+            }
+            if tools:
+                create_kwargs["tools"] = tools
+                create_kwargs["tool_choice"] = "auto"
+
+            response = await oai.chat.completions.create(**create_kwargs)
+
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                record_token_usage(
+                    getattr(usage, "prompt_tokens", 0) or 0,
+                    getattr(usage, "completion_tokens", 0) or 0,
+                )
+
+            msg = response.choices[0].message
+
+            if msg.tool_calls and search_fn is not None:
+                messages.append({
+                    "role": "assistant",
+                    "content": msg.content,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in msg.tool_calls
+                    ],
+                })
+                for tc in msg.tool_calls:
+                    args = json.loads(tc.function.arguments)
+                    results = await search_fn(args.get("query", context))
+                    used_results = results
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": _format_search_results(results),
+                    })
+            else:
+                text = (msg.content or "").strip()
+                return _parse_json_array(text), used_results
+
+        return [], used_results
 
     async def stream_article(
         self, selected_topic: str, context: str
