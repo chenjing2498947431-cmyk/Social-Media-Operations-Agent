@@ -5,7 +5,7 @@ import json
 import uuid
 from typing import Any, AsyncIterator, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend_api.models import Campaign, ContentAsset
@@ -184,6 +184,14 @@ class CampaignService:
                 image_urls=state.get("generated_images") or [],
             )
             self.session.add(asset)
+        await self.session.commit()
+
+    async def delete(self, campaign_id: str) -> None:
+        c = await self._must_get(campaign_id)
+        await self.session.execute(
+            delete(ContentAsset).where(ContentAsset.campaign_id == campaign_id)
+        )
+        await self.session.delete(c)
         await self.session.commit()
 
     async def _must_get(self, campaign_id: str) -> Campaign:

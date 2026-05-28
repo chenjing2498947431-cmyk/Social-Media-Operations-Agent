@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createCampaign, getCampaign, listCampaigns } from '../api/campaigns';
+import { createCampaign, deleteCampaign, getCampaign, listCampaigns } from '../api/campaigns';
 import type { CampaignCreateRequest } from '../types';
 
 export function useCampaigns() {
@@ -18,6 +18,16 @@ export function useCreateCampaign() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: CampaignCreateRequest) => createCampaign(req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaigns'] });
+    },
+  });
+}
+
+export function useDeleteCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteCampaign(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['campaigns'] });
     },

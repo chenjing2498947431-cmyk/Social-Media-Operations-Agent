@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,6 +62,19 @@ async def get_campaign(
     svc: CampaignService = Depends(_service),
 ) -> CampaignResponse:
     return await svc.get(campaign_id)
+
+
+@router.delete(
+    "/{campaign_id}",
+    status_code=204,
+    summary="删除 campaign 及其关联数据",
+)
+async def delete_campaign(
+    campaign_id: str = _CAMPAIGN_ID,
+    svc: CampaignService = Depends(_service),
+) -> Response:
+    await svc.delete(campaign_id)
+    return Response(status_code=204)
 
 
 @router.post(

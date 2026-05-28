@@ -22,6 +22,10 @@ export async function createCampaign(req: CampaignCreateRequest): Promise<Campai
   return data;
 }
 
+export async function deleteCampaign(id: string): Promise<void> {
+  await apiClient.delete(`/campaigns/${id}`);
+}
+
 export interface StreamHandlers {
   /** 文案文本增量（仅文案生成步骤会有）。 */
   onDelta?: (text: string) => void;

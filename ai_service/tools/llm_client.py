@@ -157,13 +157,15 @@ class LLMClient:
         tools = [_SEARCH_NEWS_TOOL] if search_fn is not None else []
         used_results: list[dict] = []
         oai = self._get_client()
+        tool_called = False  # only allow one search call per generation
 
         for _ in range(2):
             create_kwargs: dict = {
                 "model": self._settings.ark_model,
                 "messages": [{"role": "system", "content": system}] + messages,
             }
-            if tools:
+            # After a tool call, omit tools so the LLM must produce content
+            if tools and not tool_called:
                 create_kwargs["tools"] = tools
                 create_kwargs["tool_choice"] = "auto"
 
@@ -178,7 +180,8 @@ class LLMClient:
 
             msg = response.choices[0].message
 
-            if msg.tool_calls and search_fn is not None:
+            if msg.tool_calls and search_fn is not None and not tool_called:
+                tool_called = True
                 messages.append({
                     "role": "assistant",
                     "content": msg.content or "",

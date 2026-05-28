@@ -1,4 +1,5 @@
-import { Card, Empty, Image, Space, Typography } from 'antd';
+import { Card, Empty, Image, Space, Tag, Typography } from 'antd';
+import { RedEnvelopeOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import type { Campaign } from '../types';
 
@@ -7,6 +8,7 @@ export default function ResultPanel({ campaign }: { campaign: Campaign }) {
   const article = state?.draft_article ?? '';
   const images = state?.generated_images ?? [];
   const prompts = state?.image_prompts ?? [];
+  const xhsCopy = state?.xhs_copy ?? '';
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -15,6 +17,7 @@ export default function ResultPanel({ campaign }: { campaign: Campaign }) {
           <ReactMarkdown>{article}</ReactMarkdown>
         </div>
       </Card>
+
       <Card title={`配图（共 ${images.length} 张）`}>
         {images.length === 0 ? (
           <Empty description="暂无配图" />
@@ -36,6 +39,27 @@ export default function ResultPanel({ campaign }: { campaign: Campaign }) {
               ))}
             </Space>
           </Image.PreviewGroup>
+        )}
+      </Card>
+
+      <Card
+        title={
+          <Space>
+            <RedEnvelopeOutlined style={{ color: '#ff2442' }} />
+            <span>小红书文案</span>
+            <Tag color="red">可直接发布</Tag>
+          </Space>
+        }
+      >
+        {xhsCopy ? (
+          <Typography.Paragraph
+            copyable={{ text: xhsCopy, tooltips: ['复制文案', '已复制！'] }}
+            style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, marginBottom: 0 }}
+          >
+            {xhsCopy}
+          </Typography.Paragraph>
+        ) : (
+          <Empty description="文案生成中，请刷新页面…" />
         )}
       </Card>
     </Space>

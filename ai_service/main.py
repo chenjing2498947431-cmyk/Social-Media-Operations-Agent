@@ -90,9 +90,7 @@ if __name__ == "__main__":
     # 这里直接 asyncio.run(Server.serve())，绕开 uvicorn.run() 内部会把策略改回
     # ProactorEventLoop 的 setup_event_loop()。
     import asyncio
-
     import uvicorn
-
     _settings = get_settings()
     _config = uvicorn.Config(
         app,

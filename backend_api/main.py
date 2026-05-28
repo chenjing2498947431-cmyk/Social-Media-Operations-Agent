@@ -93,3 +93,16 @@ app.include_router(campaigns_router)
 @app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/docs")
+
+ 
+if __name__ == "__main__":
+    import asyncio
+    import uvicorn
+
+    _settings = get_settings()
+    _config = uvicorn.Config(
+        app,
+        host=_settings.backend_api_host,
+        port=_settings.backend_api_port,
+    )
+    asyncio.run(uvicorn.Server(_config).serve())

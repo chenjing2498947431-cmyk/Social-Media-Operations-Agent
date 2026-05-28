@@ -65,6 +65,7 @@ export interface AgentStateValues {
   revision_round?: number;
   image_prompts?: string[];
   generated_images?: string[];
+  xhs_copy?: string | null;   // 小红书文案（generate_xhs_copy 节点写入）
   status?: string;
   node_metrics?: NodeMetric[];
 }
