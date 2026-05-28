@@ -25,7 +25,6 @@ _token_sink: ContextVar[dict[str, int] | None] = ContextVar("_token_sink", defau
 
 # 节点名 -> 面向运营人员的中文标签
 NODE_LABELS: dict[str, str] = {
-    "fetch_news": "新闻搜索",          # ← 新增这一行
     "generate_topics": "选题生成",
     "generate_article": "文案撰写",
     "revise_article": "文案改写",

@@ -9,7 +9,7 @@ class AgentState(TypedDict, total=False):
     # 输入背景：每日金融热点 / 用户偏好
     context: str
 
-    # 联网搜索结果（fetch_news 节点写入）
+    # 联网搜索结果（generate_topics 节点写入）
     search_results: list[dict]
 
     # 选题环节
