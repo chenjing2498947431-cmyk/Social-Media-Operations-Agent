@@ -78,7 +78,7 @@ class WebSearchTool:
             )
             notify_resp.raise_for_status()
 
-            # Step 3: tools/call brave_news_search
+            # Step 3: tools/call brave_web_search
             search_resp = await client.post(
                 self._mcp_url,
                 headers=req_headers,
@@ -87,8 +87,8 @@ class WebSearchTool:
                     "id": 2,
                     "method": "tools/call",
                     "params": {
-                        "name": "brave_news_search",
-                        "arguments": {"query": query, "count": top_k, "freshness": "pd"},
+                        "name": "brave_web_search",
+                        "arguments": {"query": query, "count": top_k},
                     },
                 },
             )

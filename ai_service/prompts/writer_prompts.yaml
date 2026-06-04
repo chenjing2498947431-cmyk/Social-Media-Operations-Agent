@@ -26,7 +26,7 @@ image_prompt_extractor:
   user_template: |
     长文如下：
     {draft_article}
-    请输出 JSON 数组，例如 ["观点 1", "观点 2", "观点 3"]
+    请输出 JSON 对象，例如 {{"prompts": ["观点 1", "观点 2", "观点 3"]}}
 
 xhs_copy_writer:
   system: |

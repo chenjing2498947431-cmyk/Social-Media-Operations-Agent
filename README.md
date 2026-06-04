@@ -262,7 +262,6 @@ python -m scripts.smoke_graph
 # 经由 HTTP 接口跑通流程
 python -m scripts.smoke_http
 ```
-
 ---
 
 ## 备注

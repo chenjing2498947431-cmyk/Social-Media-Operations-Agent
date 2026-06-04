@@ -10,10 +10,19 @@ import re
 from typing import Any, AsyncIterator, Callable
 
 from openai import AsyncOpenAI
+from pydantic import BaseModel
 
 from ai_service.core.config import get_settings
 from ai_service.core.metrics import record_token_usage
 from ai_service.prompts import get_prompt
+
+
+class _TopicsOutput(BaseModel):
+    topics: list[str]
+
+
+class _PromptsOutput(BaseModel):
+    prompts: list[str]
 
 
 def _estimate_tokens(text: str) -> int:
@@ -50,36 +59,27 @@ def _format_search_results(results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _parse_json_array(text: str) -> list[str]:
-    """从 LLM 文本里尽力解析出一个字符串数组。
-
-    兼容三种情况：纯 JSON、被 ```json 围栏包裹、以及退化的逐行列表。
-    """
+def _extract_json_obj(text: str) -> dict:
+    """从 LLM 输出中提取第一个 JSON 对象，兼容 markdown 代码块包裹。"""
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
         cleaned = re.sub(r"\n?```$", "", cleaned).strip()
-
-    candidates = [cleaned]
-    match = re.search(r"\[.*\]", cleaned, re.DOTALL)
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict):
+            return data
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
     if match:
-        candidates.append(match.group(0))
-
-    for candidate in candidates:
         try:
-            data = json.loads(candidate)
+            data = json.loads(match.group(0))
+            if isinstance(data, dict):
+                return data
         except json.JSONDecodeError:
-            continue
-        if isinstance(data, list):
-            return [str(x).strip() for x in data if str(x).strip()]
-
-    # 退化：按行切分，去掉序号 / 项目符号
-    lines = []
-    for line in cleaned.splitlines():
-        item = re.sub(r"^\s*[-*\d.、)]+\s*", "", line).strip().strip('",')
-        if item:
-            lines.append(item)
-    return lines
+            pass
+    raise ValueError(f"无法从 LLM 输出中解析 JSON 对象: {text[:200]}")
 
 
 _SEARCH_NEWS_TOOL: dict = {
@@ -112,6 +112,34 @@ class LLMClient:
                 api_key=self._settings.ark_api_key,
             )
         return self._client
+
+    async def _complete_json(self, prompt_name: str, **fields: str) -> str:
+        """加载 prompt 配置 -> 拼接 -> 以 JSON mode 调用 -> 返回 JSON 文本。"""
+        prompt = get_prompt(prompt_name)
+        system = prompt["system"].strip()
+        user = prompt["user_template"].format(**fields).strip()
+
+        response = await self._get_client().chat.completions.create(
+            model=self._settings.ark_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        text = (response.choices[0].message.content or "").strip()
+
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            record_token_usage(
+                getattr(usage, "prompt_tokens", 0) or 0,
+                getattr(usage, "completion_tokens", 0) or 0,
+            )
+        else:
+            record_token_usage(
+                _estimate_tokens(system) + _estimate_tokens(user),
+                _estimate_tokens(text),
+            )
+        return text
 
     async def _complete(self, prompt_name: str, **fields: str) -> str:
         """加载 prompt 配置 -> 拼接 -> 调用 Ark -> 返回正文。"""
@@ -167,7 +195,7 @@ class LLMClient:
             # After a tool call, omit tools so the LLM must produce content
             if tools and not tool_called:
                 create_kwargs["tools"] = tools
-                create_kwargs["tool_choice"] = "auto"
+                create_kwargs["tool_choice"] = "required"
 
             response = await oai.chat.completions.create(**create_kwargs)
 
@@ -208,7 +236,9 @@ class LLMClient:
                     })
             else:
                 text = (msg.content or "").strip()
-                return _parse_json_array(text), used_results
+                if not text:
+                    break
+                return _TopicsOutput.model_validate(_extract_json_obj(text)).topics, used_results
 
         return [], used_results
 
@@ -262,8 +292,8 @@ class LLMClient:
         )
 
     async def extract_image_prompts(self, draft_article: str) -> list[str]:
-        text = await self._complete("image_prompt_extractor", draft_article=draft_article)
-        return _parse_json_array(text)
+        text = await self._complete_json("image_prompt_extractor", draft_article=draft_article)
+        return _PromptsOutput.model_validate(_extract_json_obj(text)).prompts
 
     async def generate_xhs_copy(
         self,

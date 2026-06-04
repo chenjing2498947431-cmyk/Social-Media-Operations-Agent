@@ -65,7 +65,7 @@ async def test_generate_topics_returns_topics_when_llm_skips_tool():
     client = LLMClient()
     mock_oai = MagicMock()
     mock_oai.chat.completions.create = AsyncMock(
-        return_value=_response(_msg(content='["选题A","选题B","选题C","选题D","选题E"]'))
+        return_value=_response(_msg(content='{"topics": ["选题A","选题B","选题C","选题D","选题E"]}'))
     )
     mock_search = AsyncMock(return_value=[])
 
@@ -90,7 +90,7 @@ async def test_generate_topics_calls_search_tool_then_returns_topics():
     mock_oai.chat.completions.create = AsyncMock(
         side_effect=[
             _response(_msg(tool_calls=[tc])),
-            _response(_msg(content='["选题A","选题B","选题C","选题D","选题E"]')),
+            _response(_msg(content='{"topics": ["选题A","选题B","选题C","选题D","选题E"]}')),
         ]
     )
     search_results = [{"title": "美联储加息", "snippet": "加息25bp", "url": "https://a.com"}]
@@ -113,7 +113,7 @@ async def test_generate_topics_without_search_fn_omits_tools():
     client = LLMClient()
     mock_oai = MagicMock()
     mock_oai.chat.completions.create = AsyncMock(
-        return_value=_response(_msg(content='["选题A"]'))
+        return_value=_response(_msg(content='{"topics": ["选题A"]}'))
     )
 
     with patch.object(client, "_get_client", return_value=mock_oai):
