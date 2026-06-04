@@ -46,6 +46,25 @@ export interface NodeEvent {
   metric?: NodeMetric;
 }
 
+/** 流式 SSE 中的工具调用事件。 */
+export interface ToolCallEvent {
+  type: 'tool_call';
+  tool: string;
+  label: string;
+  args?: Record<string, unknown>;
+  phase: 'start' | 'end';
+  result_count?: number;
+}
+
+/** 单次工具调用的展示记录。 */
+export interface ToolCallRun {
+  tool: string;
+  label: string;
+  args?: Record<string, unknown>;
+  status: 'running' | 'done';
+  resultCount?: number;
+}
+
 /** 前端展示「节点运行过程」的一行记录。 */
 export interface NodeRun {
   node: string;
@@ -53,6 +72,7 @@ export interface NodeRun {
   status: 'running' | 'done';
   durationMs?: number;
   totalTokens?: number;
+  toolCalls?: ToolCallRun[];
 }
 
 /** LangGraph checkpoint 的 state 值。 */

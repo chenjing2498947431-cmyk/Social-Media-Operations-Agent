@@ -144,3 +144,96 @@ async def test_generate_topics_loop_exhausted_returns_empty():
 
     assert topics == []
     assert used_results == []
+
+
+# ── mcp_session 路径 ──────────────────────────────────────────────────────────
+
+def _mock_mcp_session(tools: list[dict], call_tool_result: list[dict] | None = None):
+    """构造 mock MCPSession，list_tools 返回 tools，call_tool 返回指定结果。"""
+    session = MagicMock()
+    session.list_tools = AsyncMock(return_value=tools)
+    session.call_tool = AsyncMock(return_value=call_tool_result or [])
+    return session
+
+
+_BRAVE_WEB_SEARCH_FN = {
+    "name": "brave_web_search",
+    "description": "搜索最新网页信息",
+    "parameters": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_generate_topics_mcp_session_discovers_tools_and_passes_to_llm():
+    """mcp_session：list_tools 返回的工具被转换并传给 LLM；LLM 直接返回内容时不调用工具。"""
+    client = LLMClient()
+    mock_oai = MagicMock()
+    mock_oai.chat.completions.create = AsyncMock(
+        return_value=_response(_msg(content='{"topics": ["选题A","选题B","选题C","选题D","选题E"]}'))
+    )
+    session = _mock_mcp_session(tools=[_BRAVE_WEB_SEARCH_FN])
+
+    with patch.object(client, "_get_client", return_value=mock_oai):
+        topics, used_results = await client.generate_topics(
+            context="美联储议息", mcp_session=session
+        )
+
+    assert topics == ["选题A", "选题B", "选题C", "选题D", "选题E"]
+    assert used_results == []
+    session.call_tool.assert_not_called()
+
+    call_kwargs = mock_oai.chat.completions.create.call_args.kwargs
+    assert "tools" in call_kwargs
+    assert call_kwargs["tools"][0]["type"] == "function"
+    assert call_kwargs["tools"][0]["function"]["name"] == "brave_web_search"
+
+
+@pytest.mark.asyncio
+async def test_generate_topics_mcp_session_calls_tool_by_name_then_returns_topics():
+    """mcp_session：LLM 调用 brave_web_search，结果注入对话，第二轮返回选题。"""
+    client = LLMClient()
+    mock_oai = MagicMock()
+
+    tc = _tool_call("call_xyz", "brave_web_search", {"query": "美联储加息", "count": 5})
+    mock_oai.chat.completions.create = AsyncMock(
+        side_effect=[
+            _response(_msg(tool_calls=[tc])),
+            _response(_msg(content='{"topics": ["选题A","选题B","选题C","选题D","选题E"]}')),
+        ]
+    )
+    search_results = [{"title": "美联储加息", "snippet": "加息25bp", "url": "https://a.com"}]
+    session = _mock_mcp_session(tools=[_BRAVE_WEB_SEARCH_FN], call_tool_result=search_results)
+
+    with patch.object(client, "_get_client", return_value=mock_oai):
+        topics, used_results = await client.generate_topics(
+            context="美联储议息", mcp_session=session
+        )
+
+    assert topics == ["选题A", "选题B", "选题C", "选题D", "选题E"]
+    assert used_results == search_results
+    session.call_tool.assert_awaited_once_with(
+        "brave_web_search", {"query": "美联储加息", "count": 5}
+    )
+    assert mock_oai.chat.completions.create.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_topics_mcp_session_no_tools_omits_tools_kwarg():
+    """list_tools 返回空列表时，LLM 请求不含 tools 参数。"""
+    client = LLMClient()
+    mock_oai = MagicMock()
+    mock_oai.chat.completions.create = AsyncMock(
+        return_value=_response(_msg(content='{"topics": ["选题A"]}'))
+    )
+    session = _mock_mcp_session(tools=[])
+
+    with patch.object(client, "_get_client", return_value=mock_oai):
+        topics, _ = await client.generate_topics(context="黄金上涨", mcp_session=session)
+
+    assert topics == ["选题A"]
+    call_kwargs = mock_oai.chat.completions.create.call_args.kwargs
+    assert "tools" not in call_kwargs

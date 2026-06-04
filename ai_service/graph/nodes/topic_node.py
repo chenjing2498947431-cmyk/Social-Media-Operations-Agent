@@ -1,23 +1,39 @@
 """Node A & Node B：选题生成 + 人工选题中断。"""
 from __future__ import annotations
 
+import logging
+
 from langgraph.types import interrupt
 
 from ai_service.core.metrics import track_node
 from ai_service.graph.state import AgentState
 from ai_service.tools.llm_client import get_llm_client
-from ai_service.tools.web_search import get_web_search
+from ai_service.tools.web_search import get_mcp_bridge
+
+logger = logging.getLogger(__name__)
 
 
 @track_node("generate_topics")
 async def generate_topics(state: AgentState) -> dict:
-    """Node A: 让 LLM 自主决定是否联网搜索，然后生成备选选题。"""
+    """Node A: 让 LLM 自主决定是否联网搜索，然后生成备选选题。
+
+    通过 MCPBridge 动态发现 MCP 服务器上的可用工具，让 LLM 自主选择
+    调用哪个工具（如 brave_web_search / brave_local_search）。
+    若 MCP 会话建立失败，降级为不使用搜索工具直接生成。
+    """
     llm = get_llm_client()
-    search_tool = get_web_search()
-    topics, search_results = await llm.generate_topics(
-        context=state.get("context", ""),
-        search_fn=search_tool.search,
-    )
+    mcp = get_mcp_bridge()
+    try:
+        async with mcp.session() as session:
+            topics, search_results = await llm.generate_topics(
+                context=state.get("context", ""),
+                mcp_session=session,
+            )
+    except Exception as exc:
+        logger.warning("MCP 会话失败，降级为无搜索生成选题: %s", exc)
+        topics, search_results = await llm.generate_topics(
+            context=state.get("context", ""),
+        )
     return {
         "topics": topics,
         "search_results": search_results,

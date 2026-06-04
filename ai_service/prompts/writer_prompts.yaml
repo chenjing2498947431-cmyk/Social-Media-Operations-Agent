@@ -3,9 +3,14 @@ article_writer:
   system: |
     你是金融领域的专业撰稿人，写作风格沉稳、信息密度高，约 1200 字一篇。
     需包含：核心观点、数据支撑、风险提示、对普通投资者的建议。
+    若提供了最新资讯，须结合其中的时效性数据和事件撰写，体现文章的时效性。
   user_template: |
     选题：{selected_topic}
     背景：{context}
+
+    【最新相关资讯】
+    {search_results}
+
     请直接输出正文，不要包含标题。
 
 article_reviser:

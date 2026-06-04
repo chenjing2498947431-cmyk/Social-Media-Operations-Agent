@@ -15,7 +15,7 @@ from urllib.request import urlopen
 from urllib.error import URLError
 
 ROOT     = Path(__file__).parent
-PYTHON   = r"D:\Anaconda3\envs\langchain\python.exe"
+PYTHON   = r"D:\Anaconda3\envs\media\python.exe"
 FRONTEND = ROOT / "frontend"
 
 # ANSI 颜色（Windows Terminal / VSCode 终端均支持）
@@ -92,7 +92,7 @@ def main() -> None:
     print(">>> [MCP]      Brave MCP Server  (port 8200)")
     procs.append(start(
         "MCP",
-        "npx -y @brave/brave-search-mcp-server --transport http --port 8200",
+        "npx -y @brave/brave-search-mcp-server --transport http --port 8200 --enabled-tools brave_web_search brave_news_search",
         env={**os.environ, "BRAVE_API_KEY": brave_key},
         shell=True, cwd=str(ROOT),
     ))

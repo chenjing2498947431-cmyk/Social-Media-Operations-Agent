@@ -104,7 +104,7 @@ class CampaignService:
             c = await self._must_get(campaign_id)
             async for evt in self.ai.resume_workflow_stream(c.thread_id, payload):
                 etype = evt.get("type")
-                if etype in ("delta", "node"):
+                if etype in ("delta", "node", "tool_call"):
                     # 节点生命周期与文案增量原样透传给前端
                     yield _sse(evt)
                 elif etype == "state":

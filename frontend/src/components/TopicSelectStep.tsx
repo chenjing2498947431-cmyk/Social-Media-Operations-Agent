@@ -17,7 +17,7 @@ export default function TopicSelectStep({ campaign }: { campaign: Campaign }) {
   const [streaming, setStreaming] = useState(false);
   const [streamedText, setStreamedText] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const { runs, onNode, reset } = useNodeRuns();
+  const { runs, onNode, onToolCall, reset } = useNodeRuns();
   const qc = useQueryClient();
 
   const finalTopic = selected === CUSTOM ? custom.trim() : selected;
@@ -33,6 +33,7 @@ export default function TopicSelectStep({ campaign }: { campaign: Campaign }) {
       await selectTopicStream(campaign.id, finalTopic, {
         onDelta: (text) => setStreamedText((prev) => prev + text),
         onNode,
+        onToolCall,
         onDone: (updated) => {
           // 写回缓存：父组件据此切到「文案审核」步骤
           qc.setQueryData(['campaign', updated.id], updated);

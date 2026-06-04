@@ -16,7 +16,7 @@ export default function ArticleReviewStep({ campaign }: { campaign: Campaign }) 
   const [feedback, setFeedback] = useState('');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { runs, onNode, reset } = useNodeRuns();
+  const { runs, onNode, onToolCall, reset } = useNodeRuns();
   const qc = useQueryClient();
 
   async function submit(req: ReviewArticleRequest) {
@@ -26,6 +26,7 @@ export default function ArticleReviewStep({ campaign }: { campaign: Campaign }) 
     try {
       await reviewArticleStream(campaign.id, req, {
         onNode,
+        onToolCall,
         onDone: (updated) => {
           // 写回缓存：approve → 父组件切到结果页；reject → 重新渲染审核（新草稿）
           qc.setQueryData(['campaign', updated.id], updated);

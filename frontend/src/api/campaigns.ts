@@ -5,6 +5,7 @@ import type {
   NodeEvent,
   NodeMetric,
   ReviewArticleRequest,
+  ToolCallEvent,
 } from '../types';
 
 export async function listCampaigns(): Promise<Campaign[]> {
@@ -31,6 +32,8 @@ export interface StreamHandlers {
   onDelta?: (text: string) => void;
   /** 节点开始 / 结束事件。 */
   onNode?: (evt: NodeEvent) => void;
+  /** 工具调用开始 / 结束事件。 */
+  onToolCall?: (evt: ToolCallEvent) => void;
   /** 执行完成，返回更新后的 campaign。 */
   onDone: (campaign: Campaign) => void;
   /** 服务端报告的错误。 */
@@ -80,6 +83,9 @@ async function streamResume(
         label?: string;
         phase?: 'start' | 'end';
         metric?: NodeMetric;
+        tool?: string;
+        args?: Record<string, unknown>;
+        result_count?: number;
         campaign?: Campaign;
         message?: string;
       };
@@ -90,6 +96,7 @@ async function streamResume(
       }
       if (evt.type === 'delta') handlers.onDelta?.(evt.text ?? '');
       else if (evt.type === 'node') handlers.onNode?.(evt as NodeEvent);
+      else if (evt.type === 'tool_call') handlers.onToolCall?.(evt as ToolCallEvent);
       else if (evt.type === 'done' && evt.campaign) handlers.onDone(evt.campaign);
       else if (evt.type === 'error') handlers.onError(evt.message ?? '执行失败');
     }

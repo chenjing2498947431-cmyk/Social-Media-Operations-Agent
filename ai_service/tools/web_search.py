@@ -130,11 +130,15 @@ def _extract_news(data: dict[str, Any], top_k: int) -> list[dict[str, Any]]:
             news = json.loads(item["text"])
         except (json.JSONDecodeError, KeyError):
             continue
-        results.append({
+        entry: dict = {
             "title": news.get("title", ""),
             "snippet": news.get("description", ""),
             "url": news.get("url", ""),
-        })
+        }
+        age = news.get("age") or news.get("page_age")
+        if age:
+            entry["age"] = age
+        results.append(entry)
         if len(results) >= top_k:
             break
     return results
@@ -154,3 +158,159 @@ def reset_web_search() -> None:
     """测试用：清掉单例。"""
     global _search
     _search = None
+
+
+def _mcp_tool_to_openai_fn(tool: dict[str, Any]) -> dict[str, Any]:
+    """Convert an MCP tools/list entry to an OpenAI function definition dict."""
+    return {
+        "name": tool["name"],
+        "description": tool.get("description", ""),
+        "parameters": tool.get("inputSchema", {"type": "object", "properties": {}}),
+    }
+
+
+class MCPSession:
+    """A single stateful MCP HTTP session.
+
+    Keeps the httpx client open for the session lifetime so the server
+    can correlate requests via the mcp-session-id header.
+
+    Usage::
+
+        async with MCPSession(url) as session:
+            tools = await session.list_tools()
+            items = await session.call_tool("brave_web_search", {"query": "..."})
+    """
+
+    def __init__(self, mcp_url: str) -> None:
+        self._mcp_url = mcp_url
+        self._session_id: str | None = None
+        self._client: Any = None  # httpx.AsyncClient
+        self._req_id: int = 0
+
+    async def __aenter__(self) -> "MCPSession":
+        import httpx as _httpx
+        self._client = _httpx.AsyncClient(timeout=15)
+        try:
+            await self._initialize()
+        except Exception:
+            await self._client.aclose()
+            self._client = None
+            raise
+        return self
+
+    async def __aexit__(self, *_: Any) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+    def _next_id(self) -> int:
+        self._req_id += 1
+        return self._req_id
+
+    def _req_headers(self) -> dict[str, str]:
+        h = dict(_MCP_HEADERS)
+        if self._session_id:
+            h["mcp-session-id"] = self._session_id
+        return h
+
+    async def _initialize(self) -> None:
+        resp = await self._client.post(
+            self._mcp_url,
+            headers=_MCP_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": self._next_id(),
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "ai-service", "version": "1.0"},
+                },
+            },
+        )
+        resp.raise_for_status()
+        self._session_id = resp.headers.get("mcp-session-id")
+        await self._client.post(
+            self._mcp_url,
+            headers=self._req_headers(),
+            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        )
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        """Return available MCP tools as OpenAI-compatible function definitions.
+
+        Returns an empty list on failure so the caller can degrade gracefully.
+        """
+        try:
+            resp = await self._client.post(
+                self._mcp_url,
+                headers=self._req_headers(),
+                json={
+                    "jsonrpc": "2.0",
+                    "id": self._next_id(),
+                    "method": "tools/list",
+                    "params": {},
+                },
+            )
+            resp.raise_for_status()
+            data = _parse_sse(resp.text)
+            if not data:
+                return []
+            tools = data.get("result", {}).get("tools", [])
+            return [_mcp_tool_to_openai_fn(t) for t in tools]
+        except Exception as exc:
+            logger.warning("MCPSession.list_tools 失败: %s", exc)
+            return []
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
+        """Call an MCP tool; return parsed news items [{title, snippet, url}, ...].
+
+        Returns an empty list on failure so the caller can degrade gracefully.
+        """
+        try:
+            resp = await self._client.post(
+                self._mcp_url,
+                headers=self._req_headers(),
+                json={
+                    "jsonrpc": "2.0",
+                    "id": self._next_id(),
+                    "method": "tools/call",
+                    "params": {"name": name, "arguments": arguments},
+                },
+            )
+            resp.raise_for_status()
+            data = _parse_sse(resp.text)
+            if not data:
+                return []
+            return _extract_news(data, top_k=8)
+        except Exception as exc:
+            logger.warning("MCPSession.call_tool(%s) 失败: %s", name, exc)
+            return []
+
+
+class MCPBridge:
+    """Factory that creates MCP sessions against a configured server URL."""
+
+    def __init__(self, mcp_url: str | None = None) -> None:
+        self._mcp_url = mcp_url or get_settings().brave_mcp_url
+
+    def session(self) -> MCPSession:
+        """Return a new async context-manager session."""
+        return MCPSession(self._mcp_url)
+
+
+_bridge: MCPBridge | None = None
+
+
+def get_mcp_bridge() -> MCPBridge:
+    global _bridge
+    if _bridge is None:
+        _bridge = MCPBridge()
+    return _bridge
+
+
+def reset_mcp_bridge() -> None:
+    """测试用：清掉单例。"""
+    global _bridge
+    _bridge = None

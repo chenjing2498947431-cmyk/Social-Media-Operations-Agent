@@ -6,15 +6,32 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, AsyncIterator, Callable
 
+logger = logging.getLogger(__name__)
+
+from langgraph.config import get_stream_writer
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from ai_service.core.config import get_settings
 from ai_service.core.metrics import record_token_usage
 from ai_service.prompts import get_prompt
+
+# MCP 工具名到中文标签的映射；未收录的工具直接用工具名展示。
+_TOOL_LABELS: dict[str, str] = {
+    "brave_web_search": "网页搜索",
+    "brave_news_search": "新闻搜索",
+}
+
+
+def _get_writer():
+    try:
+        return get_stream_writer()
+    except RuntimeError:
+        return lambda _: None
 
 
 class _TopicsOutput(BaseModel):
@@ -50,7 +67,10 @@ def _format_search_results(results: list[dict]) -> str:
         title = r.get("title", "")
         snippet = r.get("snippet", "")
         url = r.get("url", "")
+        age = r.get("age", "")
         line = f"{i}. {title}"
+        if age:
+            line += f"（{age}）"
         if snippet:
             line += f"\n   {snippet}"
         if url:
@@ -170,11 +190,17 @@ class LLMClient:
     async def generate_topics(
         self,
         context: str,
+        mcp_session: Any | None = None,
         search_fn: Callable | None = None,
     ) -> tuple[list[str], list[dict]]:
         """结合可选的联网工具生成候选选题列表。
 
-        LLM 自主决定是否调用 search_news；最多循环 2 轮（1 次工具调用 + 1 次生成）。
+        优先使用 mcp_session：通过 tools/list 动态发现工具，让 LLM 自主选择
+        调用哪个 MCP 工具（如 brave_web_search / brave_local_search）。
+
+        若仅传 search_fn，则使用旧的 search_news 包装工具（向后兼容）。
+
+        最多循环 2 轮（1 次工具调用 + 1 次生成）。
         无论是否调用工具，均返回 (topics, used_results)。
         """
         prompt = get_prompt("topic_generator")
@@ -182,10 +208,18 @@ class LLMClient:
         user = prompt["user_template"].format(context=context).strip()
 
         messages: list[dict] = [{"role": "user", "content": user}]
-        tools = [_SEARCH_NEWS_TOOL] if search_fn is not None else []
         used_results: list[dict] = []
         oai = self._get_client()
         tool_called = False  # only allow one search call per generation
+
+        # Discover available tools: prefer mcp_session, fall back to search_fn shim
+        if mcp_session is not None:
+            fn_defs = await mcp_session.list_tools()
+            tools = [{"type": "function", "function": fn} for fn in fn_defs]
+        elif search_fn is not None:
+            tools = [_SEARCH_NEWS_TOOL]
+        else:
+            tools = []
 
         for _ in range(2):
             create_kwargs: dict = {
@@ -208,7 +242,7 @@ class LLMClient:
 
             msg = response.choices[0].message
 
-            if msg.tool_calls and search_fn is not None and not tool_called:
+            if msg.tool_calls and not tool_called:
                 tool_called = True
                 messages.append({
                     "role": "assistant",
@@ -225,9 +259,33 @@ class LLMClient:
                         for tc in msg.tool_calls
                     ],
                 })
+                writer = _get_writer()
                 for tc in msg.tool_calls:
                     args = json.loads(tc.function.arguments)
-                    results = await search_fn(args.get("query", context))
+                    tool_name = tc.function.name
+                    tool_label = _TOOL_LABELS.get(tool_name, tool_name)
+                    writer({
+                        "type": "tool_call",
+                        "tool": tool_name,
+                        "label": tool_label,
+                        "args": args,
+                        "phase": "start",
+                    })
+                    logger.info("工具调用: %s | 参数: %s", tool_name, args)
+                    if mcp_session is not None:
+                        results = await mcp_session.call_tool(tool_name, args)
+                    elif search_fn is not None:
+                        results = await search_fn(args.get("query", context))
+                    else:
+                        results = []
+                    logger.info("工具返回: %s | 结果数: %d", tool_name, len(results))
+                    writer({
+                        "type": "tool_call",
+                        "tool": tool_name,
+                        "label": tool_label,
+                        "phase": "end",
+                        "result_count": len(results),
+                    })
                     used_results.extend(results)
                     messages.append({
                         "role": "tool",
@@ -238,12 +296,24 @@ class LLMClient:
                 text = (msg.content or "").strip()
                 if not text:
                     break
-                return _TopicsOutput.model_validate(_extract_json_obj(text)).topics, used_results
+                try:
+                    parsed = _extract_json_obj(text)
+                    return _TopicsOutput.model_validate(parsed).topics, used_results
+                except Exception as exc:
+                    logger.warning(
+                        "generate_topics: LLM 输出格式异常（可能是工具调用 JSON），忽略并继续: %s | raw=%s",
+                        exc,
+                        text[:200],
+                    )
+                    break
 
         return [], used_results
 
     async def stream_article(
-        self, selected_topic: str, context: str
+        self,
+        selected_topic: str,
+        context: str,
+        search_results: list[dict] | None = None,
     ) -> AsyncIterator[str]:
         """流式生成文案：逐段 yield 文本增量；结束后上报真实 token 用量。
 
@@ -252,7 +322,9 @@ class LLMClient:
         prompt = get_prompt("article_writer")
         system = prompt["system"].strip()
         user = prompt["user_template"].format(
-            selected_topic=selected_topic, context=context
+            selected_topic=selected_topic,
+            context=context,
+            search_results=_format_search_results(search_results or []),
         ).strip()
 
         stream = await self._get_client().responses.create(

@@ -142,6 +142,10 @@ async def resume_workflow(
             break
 
     if interrupt_info is None:
+        # 无中断点：若还有待执行节点（上次节点失败卡住），尝试继续运行
+        if snapshot.next:
+            await graph.ainvoke(None, config=_thread_config(thread_id))
+            return await _build_state_response(thread_id)
         raise HTTPException(status_code=409, detail="workflow is not interrupted")
 
     action = interrupt_info.get("action")
@@ -197,6 +201,27 @@ async def resume_workflow_stream(
             interrupt_info = task.interrupts[0].value
             break
     if interrupt_info is None:
+        # 无中断点：若还有待执行节点（上次节点失败卡住），继续运行并流式返回
+        if snapshot.next:
+            async def _retry_stream() -> Any:
+                try:
+                    async for chunk in graph.astream(
+                        None,
+                        config=_thread_config(thread_id),
+                        stream_mode="custom",
+                    ):
+                        if isinstance(chunk, dict) and chunk.get("type") in ("delta", "node", "tool_call"):
+                            yield _sse(chunk)
+                    state_resp = await _build_state_response(thread_id)
+                    yield _sse({"type": "state", "workflow_state": state_resp.model_dump(mode="json")})
+                except Exception as exc:
+                    yield _sse({"type": "error", "message": str(exc)})
+
+            return StreamingResponse(
+                _retry_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
         raise HTTPException(status_code=409, detail="workflow is not interrupted")
 
     action = interrupt_info.get("action")
@@ -226,7 +251,7 @@ async def resume_workflow_stream(
                 stream_mode="custom",
             ):
                 # 节点生命周期 / 文案增量均由节点经 stream writer 推出
-                if isinstance(chunk, dict) and chunk.get("type") in ("delta", "node"):
+                if isinstance(chunk, dict) and chunk.get("type") in ("delta", "node", "tool_call"):
                     yield _sse(chunk)
             state_resp = await _build_state_response(thread_id)
             yield _sse(
