@@ -23,21 +23,21 @@ class ReviewDecision(str, Enum):
 class CampaignCreateRequest(BaseModel):
     context: str = Field(
         ...,
-        description="每日金融热点 / 用户偏好等输入背景，会进入 LangGraph 的初始 state.context",
-        examples=["美联储议息会议召开，A股震荡，黄金创新高，10 年期美债收益率回落"],
+        description="营销背景 / 当日热点 / 用户偏好等输入背景，会进入 LangGraph 的初始 state.context",
+        examples=["新品即将发布，目标客群关注性价比与服务体验，近期社媒讨论热度上升"],
     )
     title: Optional[str] = Field(
         default=None,
         description="可选的任务标题，仅用于业务库展示",
-        examples=["5月19日金融选题"],
+        examples=["5月19日新品营销选题"],
     )
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "context": "美联储议息会议召开，A股震荡，黄金创新高，10 年期美债收益率回落",
-                    "title": "5月19日金融选题",
+                    "context": "新品即将发布，目标客群关注性价比与服务体验，近期社媒讨论热度上升",
+                    "title": "5月19日新品营销选题",
                 }
             ]
         }

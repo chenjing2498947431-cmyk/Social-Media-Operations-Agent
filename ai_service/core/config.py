@@ -24,6 +24,12 @@ class AIServiceSettings(BaseSettings):
     # Brave Search MCP Server（本地 HTTP 模式）
     brave_mcp_url: str = "http://localhost:8200/mcp"
 
+    # MCP_Cluster shared platform integration
+    shared_platform_enabled: bool = False
+    shared_platform_base_url: str = "http://localhost:8000"
+    shared_platform_project_id: str = "finance_media"
+    shared_platform_env: str = "dev"
+
 
 @lru_cache
 def get_settings() -> AIServiceSettings:

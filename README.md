@@ -1,6 +1,6 @@
-# 金融自媒体运营 Agent
+# 智能营销编排 Agent 工作流
 
-基于 **LangGraph** 的金融自媒体内容生产 Agent：从「每日金融热点」出发，自动完成 **选题 → 写稿 → 审核 → 配图** 全流程，并在选题与审核两个环节引入 **人工介入（Human-in-the-Loop）**，由运营人员拍板。
+基于 **LangGraph** 的智能营销编排 Agent 工作流：从「营销背景与当日热点」出发，自动完成 **选题 → 写稿 → 审核 → 配图** 全流程，并在选题与审核两个环节引入 **人工介入（Human-in-the-Loop）**，由运营人员拍板。
 
 文本与配图均接入 **火山方舟（Ark）大模型**；工作流状态通过 LangGraph Checkpointer 持久化到 PostgreSQL，支持中断恢复、进程重启不丢状态。
 
@@ -73,7 +73,7 @@ START
 ## 目录结构
 
 ```
-Social-Media-Operations-Agent/
+Marketing-Orchestration-Agent/
 ├── ai_service/              # LangGraph 工作流服务 (:8100)
 │   ├── core/config.py       # 配置 (pydantic-settings)
 │   ├── graph/
@@ -194,6 +194,10 @@ npm run dev
 | `ARK_MODEL` | `ep-...` | 语言模型的推理接入点 ID |
 | `ARK_IMAGE_MODEL` | `doubao-seedream-4-5-251128` | 文生图模型 |
 | `CORS_ALLOW_ORIGINS` | `["*"]` | 允许跨域的前端来源，生产可收敛 |
+| `SHARED_PLATFORM_ENABLED` | `false` | 是否将非流式文本 LLM 调用切到 MCP_Cluster LLM Gateway |
+| `SHARED_PLATFORM_BASE_URL` | `http://localhost:8400` | MCP_Cluster 共享平台服务地址；本地建议固定 8400，避免和 backend_api 的 8000 冲突 |
+| `SHARED_PLATFORM_PROJECT_ID` | `finance_media` | 调用共享平台时使用的项目 ID |
+| `SHARED_PLATFORM_ENV` | `dev` | 调用共享平台时使用的环境 |
 
 > `.env` 含密钥，已被 `.gitignore` 忽略，请勿提交。
 

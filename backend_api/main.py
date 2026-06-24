@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 API_DESCRIPTION = """
-**金融自媒体运营 Agent** - 业务后台服务。
+**智能营销编排 Agent 工作流** - 业务后台服务。
 
 按下面三步即可在 Swagger UI 上手工跑通整条工作流：
 
@@ -43,7 +43,7 @@ API_DESCRIPTION = """
 TAGS_METADATA = [
     {
         "name": "campaigns",
-        "description": "Campaign（一次完整运营任务）的 CRUD + 工作流推进，调试主入口。",
+        "description": "Campaign（一次完整营销编排任务）的 CRUD + 工作流推进，调试主入口。",
     },
     {"name": "health", "description": "探活与基础信息。"},
 ]
@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Financial Agent · Backend API",
+    title="Marketing Orchestration Agent · Backend API",
     version="0.1.0",
     description=API_DESCRIPTION,
     openapi_tags=TAGS_METADATA,

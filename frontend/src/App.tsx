@@ -21,7 +21,7 @@ export default function App() {
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <RocketOutlined style={{ color: '#e94560', fontSize: 22 }} />
           <Typography.Title level={4} style={{ color: '#fff', margin: 0, letterSpacing: 1 }}>
-            金融自媒体运营 Agent
+            智能营销编排 Agent 工作流
           </Typography.Title>
         </Link>
       </Header>

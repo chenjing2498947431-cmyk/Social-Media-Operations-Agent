@@ -152,7 +152,7 @@ export default function CampaignListPage() {
         style={{ borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}
         title={
           <Typography.Title level={5} style={{ margin: 0 }}>
-            运营任务列表
+            营销编排任务列表
           </Typography.Title>
         }
         extra={

@@ -146,6 +146,23 @@ async def test_generate_topics_loop_exhausted_returns_empty():
     assert used_results == []
 
 
+@pytest.mark.asyncio
+async def test_generate_topics_returns_fallback_when_model_gateway_fails():
+    """模型网关连接失败时返回本地兜底选题，避免创建 campaign 直接 500。"""
+    client = LLMClient()
+    mock_oai = MagicMock()
+    mock_oai.chat.completions.create = AsyncMock(
+        side_effect=RuntimeError("model gateway unavailable")
+    )
+
+    with patch.object(client, "_get_client", return_value=mock_oai):
+        topics, used_results = await client.generate_topics(context="黄金价格上涨")
+
+    assert len(topics) == 5
+    assert all("黄金价格上涨" in topic for topic in topics)
+    assert used_results == []
+
+
 # ── mcp_session 路径 ──────────────────────────────────────────────────────────
 
 def _mock_mcp_session(tools: list[dict], call_tool_result: list[dict] | None = None):

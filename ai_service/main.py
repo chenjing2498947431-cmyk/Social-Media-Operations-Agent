@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 API_DESCRIPTION = """
-**金融自媒体运营 Agent** - LangGraph 工作流服务。
+**智能营销编排 Agent 工作流** - LangGraph 工作流服务。
 
 直接驱动 LangGraph，便于跳过业务层做单图调试。手工跑通流程：
 
@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Financial Agent · AI Service",
+    title="Marketing Orchestration Agent · AI Service",
     version="0.1.0",
     description=API_DESCRIPTION,
     openapi_tags=TAGS_METADATA,

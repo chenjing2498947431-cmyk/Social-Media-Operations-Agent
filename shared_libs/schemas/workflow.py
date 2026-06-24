@@ -23,8 +23,8 @@ class WorkflowStartRequest(BaseModel):
     )
     context: str = Field(
         ...,
-        description="进入 state.context 的金融背景文本",
-        examples=["美联储议息会议召开，A股震荡，黄金创新高"],
+        description="进入 state.context 的营销背景文本",
+        examples=["新品即将发布，目标客群关注性价比与服务体验，近期社媒讨论热度上升"],
     )
 
     model_config = ConfigDict(
@@ -32,7 +32,7 @@ class WorkflowStartRequest(BaseModel):
             "examples": [
                 {
                     "thread_id": "thread-demo-001",
-                    "context": "美联储议息会议召开，A股震荡，黄金创新高",
+                    "context": "新品即将发布，目标客群关注性价比与服务体验，近期社媒讨论热度上升",
                 }
             ]
         }
